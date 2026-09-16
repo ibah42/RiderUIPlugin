@@ -1,0 +1,33 @@
+<idea-plugin>
+    <id>com.hitapps.allman-view</id>
+    <name>Allman View</name>
+    <vendor email="ivan.voinyi@hitapps.com">Hitapps</vendor>
+
+    <description><![CDATA[
+    Показывает код в стиле Allman, не меняя файл.<br/><br/>
+    Если строка кончается на <code>{</code>, исходная скобка прячется фолдингом с пустым
+    плейсхолдером, а под строкой рисуется фантомная строка со скобкой на нужном отступе.
+    То же самое для <code>} else {</code>, <code>} catch {</code>, <code>} finally {</code>.<br/><br/>
+    В файл ничего не пишется: копирование, поиск, компилятор и git видят реальный текст.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.hitapps.allmanview.AllmanStartup"/>
+        <applicationConfigurable
+                parentId="editor"
+                id="com.hitapps.allmanview.settings"
+                instance="com.hitapps.allmanview.AllmanConfigurable"
+                displayName="Allman View"/>
+    </extensions>
+
+    <actions>
+        <action id="AllmanView.Toggle"
+                class="com.hitapps.allmanview.ToggleAllmanAction"
+                text="Скобки: Allman"
+                description="Включить/выключить визуальный перенос открывающих скобок">
+            <add-to-group group-id="ViewMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
