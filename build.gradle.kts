@@ -1,14 +1,13 @@
-import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.2.0"
+    id("org.jetbrains.kotlin.jvm") version "2.4.20"
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
 group = "com.hitapps"
-version = "0.1.0"
+version = "0.4.0"
 
 repositories {
     mavenCentral()
@@ -20,16 +19,18 @@ repositories {
 dependencies {
     intellijPlatform {
         create(
-            IntelliJPlatformType.fromCode(providers.gradleProperty("platformType").get()),
-            providers.gradleProperty("platformVersion").get(),
+            providers.gradleProperty("platformType"),
+            providers.gradleProperty("platformVersion"),
         )
         testFramework(TestFrameworkType.Platform)
     }
-    implementation(kotlin("stdlib"))
+    // kotlin-stdlib сознательно не подключаем: его даёт сама IDE
+    // (см. kotlin.stdlib.default.dependency=false в gradle.properties).
     testImplementation("junit:junit:4.13.2")
 }
 
 kotlin {
+    // Платформа 2026.x работает на JBR 21 — собираем под неё, а не под JDK, которым запущен Gradle.
     jvmToolchain(21)
 }
 
@@ -37,8 +38,8 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            // Верхнюю границу не фиксируем — иначе плагин будет отваливаться на каждом апдейте Rider.
-            untilBuild = provider { null }
+            // untilBuild намеренно не задаём — берётся дефолт от целевой сборки.
+            // Когда выйдет следующий Rider, поднять platformVersion и пересобрать.
         }
     }
     buildSearchableOptions = false
@@ -46,4 +47,8 @@ intellijPlatform {
 
 tasks.test {
     useJUnit()
+    testLogging {
+        events("passed", "failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }

@@ -1,5 +1,38 @@
+# --- IntelliJ Platform Gradle Plugin ---
+# Кэш плагина: распакованная целевая IDE, sandbox, layout-индексы.
+# Легко переваливает за гигабайт и полностью восстанавливается сборкой.
+.intellijPlatform/
+
+# --- Gradle ---
 .gradle/
 build/
-out/
+.kotlin/
+local.properties
+gradle-local.properties
+
+# Враппер, наоборот, нужен в репозитории — без него gradlew не заработает после клона
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# --- Собранные артефакты ---
+-BUILD-/
+*.zip
+
+# --- IntelliJ ---
 .idea/
 *.iml
+*.ipr
+*.iws
+out/
+
+# --- ОС и редакторы ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+
+# --- Мусор ---
+*.log
+*.hprof

@@ -17,19 +17,31 @@ import com.intellij.openapi.util.Disposer
 class AllmanService : Disposable {
 
     init {
-        EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
-            override fun editorCreated(event: EditorFactoryEvent) = attach(event.editor)
+        EditorFactory.getInstance().addEditorFactoryListener(
+            object : EditorFactoryListener {
+                override fun editorCreated(event: EditorFactoryEvent) {
+                    attach(event.editor)
+                }
 
-            override fun editorReleased(event: EditorFactoryEvent) {
-                event.editor.getUserData(AllmanController.KEY)?.let { Disposer.dispose(it) }
-            }
-        }, this)
+                override fun editorReleased(event: EditorFactoryEvent) {
+                    val controller = event.editor.getUserData(AllmanController.KEY)
+                    if (controller != null) {
+                        Disposer.dispose(controller)
+                    }
+                }
+            },
+            this,
+        )
     }
 
-    /** Контроллер вешаем всегда — включение/выключение решается уже внутри refresh(). */
+    /** Контроллер вешаем всегда — включение и выключение решается уже внутри refresh(). */
     fun attach(editor: Editor) {
-        if (editor.editorKind != EditorKind.MAIN_EDITOR) return
-        if (editor.getUserData(AllmanController.KEY) != null) return
+        if (editor.editorKind != EditorKind.MAIN_EDITOR) {
+            return
+        }
+        if (editor.getUserData(AllmanController.KEY) != null) {
+            return
+        }
         val controller = AllmanController(editor)
         Disposer.register(this, controller)
     }
@@ -38,20 +50,28 @@ class AllmanService : Disposable {
         ApplicationManager.getApplication().invokeLater {
             for (editor in EditorFactory.getInstance().allEditors) {
                 attach(editor)
-                editor.getUserData(AllmanController.KEY)?.schedule(0)
+                val controller = editor.getUserData(AllmanController.KEY)
+                if (controller != null) {
+                    controller.schedule(0)
+                }
             }
         }
     }
 
-    override fun dispose() = Unit
+    override fun dispose() {
+        // Слушатель редакторов и все контроллеры сняты через Disposer.
+    }
 
     companion object {
-        fun getInstance(): AllmanService = service()
+        fun getInstance(): AllmanService {
+            return service()
+        }
     }
 }
 
 /** Поднимает сервис и подхватывает редакторы, уже открытые до старта плагина. */
 class AllmanStartup : ProjectActivity {
+
     override suspend fun execute(project: Project) {
         AllmanService.getInstance().refreshAll()
     }

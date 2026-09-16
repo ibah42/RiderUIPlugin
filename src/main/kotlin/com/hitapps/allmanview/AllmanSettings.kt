@@ -1,5 +1,6 @@
 package com.hitapps.allmanview
 
+import com.hitapps.allmanview.scan.Dialects
 import com.intellij.openapi.components.BaseState
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.SimplePersistentStateComponent
@@ -18,22 +19,41 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         /** true — разносим ещё и `} else {` на три строки; false — только висящую `{`. */
         var fullAllman: Boolean by property(true)
 
-        /** Не трогаем строку, на которой стоит каретка: пока печатаешь, скобка остаётся на месте. */
-        var skipCaretLine: Boolean by property(true)
+        /** Гасить исходный текст, который визуально уехал вниз. */
+        var dimOriginal: Boolean by property(true)
 
-        var extensions: String? by string(DEFAULT_EXTENSIONS)
+        /** Применять к любому текстовому файлу, игнорируя [extensions]. */
+        var allFiles: Boolean by property(false)
+
+        var extensions: String? by string(Dialects.DEFAULT_EXTENSIONS)
     }
 
-    fun extensionSet(): Set<String> =
-        (state.extensions ?: DEFAULT_EXTENSIONS)
-            .split(',', ' ', ';')
-            .mapNotNull { it.trim().removePrefix(".").lowercase().ifEmpty { null } }
-            .toSet()
+    fun extensionSet(): Set<String> {
+        val configured = state.extensions ?: Dialects.DEFAULT_EXTENSIONS
+        val result = HashSet<String>()
+
+        for (token in configured.split(',', ' ', ';', '\n')) {
+            val normalized = token.trim().removePrefix(".").lowercase()
+            if (normalized.isNotEmpty()) {
+                result.add(normalized)
+            }
+        }
+        return result
+    }
+
+    fun appliesTo(extension: String?): Boolean {
+        if (state.allFiles) {
+            return true
+        }
+        if (extension == null) {
+            return false
+        }
+        return extension.lowercase() in extensionSet()
+    }
 
     companion object {
-        const val DEFAULT_EXTENSIONS =
-            "cs,cpp,cc,cxx,c,h,hpp,hlsl,cginc,compute,shader,json,js,jsx,ts,tsx,java,kt,kts"
-
-        fun getInstance(): AllmanSettings = service()
+        fun getInstance(): AllmanSettings {
+            return service()
+        }
     }
 }

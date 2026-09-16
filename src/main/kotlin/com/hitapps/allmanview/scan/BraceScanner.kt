@@ -5,409 +5,769 @@ package com.hitapps.allmanview.scan
  * всё остальное у C-подобных языков одинаково.
  */
 enum class Flavor {
-    /** @"verbatim", """raw""", $"interp" */
+    /** C#: `@"verbatim"`, `"""raw"""`, `$"interp"` */
     CSHARP,
 
-    /** R"delim(raw)delim", 1'000'000 */
+    /** C/C++/шейдеры: `R"delim(raw)delim"`, `1'000'000` */
     CPP,
 
-    /** `template ${literals}` */
+    /** Java, Kotlin, Scala, Groovy, Swift, Dart: `"""` текстовые блоки */
+    JVM,
+
+    /** JS, TS, Go, PHP: `` `template ${literals}` `` */
+    WEB,
+
+    /** Всё остальное: только `"..."` и `'...'`. Безопасный дефолт. */
     GENERIC,
 }
 
 /**
  * Одно место, где мы визуально ломаем строку на Allman.
  *
- * @param hideStart  offset первого прячущегося символа
- * @param hideEnd    offset конца прячущегося куска (exclusive)
+ * Исходный текст не прячется — он остаётся на месте и гасится в серый,
+ * а под строкой дорисовывается фантом обычным цветом.
+ *
+ * @param dimStart offset первого гасимого символа
+ * @param dimEnd offset конца гасимого куска (exclusive)
  * @param anchorOffset offset конца строки-владельца — якорь для block inlay
- * @param indent     ведущий whitespace строки-владельца, как есть (табы/пробелы)
+ * @param indent ведущий whitespace строки-владельца, как есть (табы/пробелы)
  * @param phantomLines что рисуем фантомными строками, сверху вниз
  */
 data class PhantomSite(
-    val hideStart: Int,
-    val hideEnd: Int,
+    val dimStart: Int,
+    val dimEnd: Int,
     val anchorOffset: Int,
     val indent: String,
     val phantomLines: List<String>,
 )
 
-private const val NORMAL = 0
-private const val LINE_COMMENT = 1
-private const val BLOCK_COMMENT = 2
-private const val STRING = 3
-private const val CHAR = 4
-private const val VERBATIM = 5
-private const val RAW_CS = 6
-private const val RAW_CPP = 7
-private const val TEMPLATE = 8
+/** Состояние лексера. */
+private enum class LexerState {
+    CODE,
+    LINE_COMMENT,
+    BLOCK_COMMENT,
 
-private class Frame(
-    val state: Int,
+    /** `"..."` с обратным слешем как экранированием. */
+    STRING,
+
+    /** `'x'` — символьный литерал. */
+    CHARACTER,
+
+    /** C#: `@"..."`, где кавычка экранируется удвоением. */
+    VERBATIM_STRING,
+
+    /** `"""..."""` — C# raw strings, текстовые блоки Java/Kotlin/Swift. */
+    TRIPLE_QUOTED_STRING,
+
+    /** C++: `R"delim(...)delim"`. */
+    CPP_RAW_STRING,
+
+    /** `` `...` `` с дырками `${...}`. */
+    BACKTICK_TEMPLATE,
+}
+
+/** Строковый контекст, в который надо вернуться, когда закроется дырка интерполяции. */
+private class InterpolationFrame(
+    val lexerState: LexerState,
+    val interpolationDollars: Int,
+    val rawQuoteCount: Int,
+    val cppRawDelimiter: String,
+    val holeBraceDepth: Int,
+)
+
+/** Разобранный префикс строкового литерала: `$`, `@`, `R`. */
+private class LiteralPrefix(
     val dollars: Int,
-    val rawQuotes: Int,
-    val delim: String,
-    val holeDepth: Int,
+    val isVerbatim: Boolean,
+    val isCppRaw: Boolean,
 )
 
 /**
  * Линейный скан документа. Никаких зависимостей от IntelliJ — чистая функция от текста.
  *
- * Однострочные состояния (строка в кавычках, char, //) принудительно сбрасываются на \n:
- * это ограничивает возможный рассинхроном ровно одной строкой, а не всем хвостом файла.
+ * Однострочные состояния (строка в кавычках, символьный литерал, `//`) принудительно
+ * сбрасываются на переводе строки: это ограничивает возможный рассинхрон ровно одной
+ * строкой, а не всем хвостом файла.
  */
 class BraceScanner(
     private val text: CharSequence,
     private val flavor: Flavor,
     private val fullAllman: Boolean,
 ) {
-    private val result = ArrayList<PhantomSite>()
-    private val n = text.length
-    private var i = 0
+    // Возможности диалекта. Держим флагами, а не сравнениями с enum по всему коду:
+    // языков много, а различаются они ровно тем, как устроены строковые литералы.
+    private val supportsVerbatimStrings = flavor == Flavor.CSHARP
+    private val supportsTripleQuotedStrings = flavor == Flavor.CSHARP || flavor == Flavor.JVM
+    private val supportsCppRawStrings = flavor == Flavor.CPP
+    private val supportsDigitSeparatorQuote = flavor == Flavor.CPP
+    private val supportsBacktickTemplates = flavor == Flavor.WEB
 
-    // состояние текущей строки
-    private var lineStart = 0
-    private var lineClean = true
-    private var firstCode = -1
-    private var lastCode = -1
+    private val foundSites = ArrayList<PhantomSite>()
+    private val textLength = text.length
 
-    // состояние лексера
-    private var state = NORMAL
-    private var dollars = 0
-    private var rawQuotes = 0
-    private var cppDelim = ""
-    private val stack = ArrayDeque<Frame>()
-    private var holeDepth = 0
+    /** Курсор по документу. */
+    private var position = 0
+
+    // --- состояние текущей строки ---
+
+    private var lineStartOffset = 0
+    private var lineNumber = 0
+
+    /** Строка начинается в коде, а не внутри многострочного литерала или комментария. */
+    private var lineStartsInCode = true
+
+    private var firstCodeOffset = -1
+    private var lastCodeOffset = -1
+
+    // --- многострочные конструкции ---
+
+    /**
+     * Глубина `(` и `[`. Нужна, чтобы у многострочной сигнатуры
+     * ```
+     * void Foo(
+     *     int a,
+     *     int b) {
+     * ```
+     * фантомная скобка встала под `void`, а не под `int b`.
+     */
+    private var bracketDepth = 0
+    private var bracketDepthAtLineStart = 0
+    private var statementLineStartOffset = 0
+    private var statementLineNumber = 0
+
+    // --- состояние лексера ---
+
+    private var lexerState = LexerState.CODE
+
+    /** Сколько `$` стоит перед кавычкой: `$"..."` → 1, `$$"""..."""` → 2, не интерполяция → 0. */
+    private var interpolationDollars = 0
+
+    /** Длина открывающей серии кавычек для [LexerState.TRIPLE_QUOTED_STRING]. */
+    private var rawQuoteCount = 0
+
+    /** Разделитель из `R"delim(`. */
+    private var cppRawDelimiter = ""
+
+    private val interpolationStack = ArrayDeque<InterpolationFrame>()
+
+    /** Глубина `{}` внутри текущей дырки интерполяции. */
+    private var holeBraceDepth = 0
 
     fun scan(): List<PhantomSite> {
-        while (i < n) {
-            val c = text[i]
-            if (c == '\n') {
-                finishLine(i)
-                i++
+        while (position < textLength) {
+            val current = text[position]
+            if (current == '\n') {
+                finishLine(position)
+                position++
                 continue
             }
-            when (state) {
-                NORMAL -> stepNormal(c)
-                LINE_COMMENT -> i++
-                BLOCK_COMMENT -> stepBlockComment(c)
-                STRING -> stepString(c)
-                CHAR -> stepChar(c)
-                VERBATIM -> stepVerbatim(c)
-                RAW_CS -> stepRawCs(c)
-                RAW_CPP -> stepRawCpp(c)
-                TEMPLATE -> stepTemplate(c)
-                else -> i++
+            when (lexerState) {
+                LexerState.CODE -> stepCode(current)
+                LexerState.LINE_COMMENT -> position++
+                LexerState.BLOCK_COMMENT -> stepBlockComment(current)
+                LexerState.STRING -> stepString(current)
+                LexerState.CHARACTER -> stepCharacterLiteral(current)
+                LexerState.VERBATIM_STRING -> stepVerbatimString(current)
+                LexerState.TRIPLE_QUOTED_STRING -> stepTripleQuotedString(current)
+                LexerState.CPP_RAW_STRING -> stepCppRawString(current)
+                LexerState.BACKTICK_TEMPLATE -> stepBacktickTemplate(current)
             }
         }
-        finishLine(n)
-        return result
+        finishLine(textLength)
+        return foundSites
     }
 
-    // ---------------------------------------------------------------- состояния
+    // ---------------------------------------------------------------- состояния лексера
 
-    private fun stepNormal(c: Char) {
-        when {
-            c == '/' && peek(1) == '/' -> {
-                state = LINE_COMMENT; i += 2
+    private fun stepCode(current: Char) {
+        when (current) {
+            '/' -> {
+                openCommentOrSlash()
             }
-            c == '/' && peek(1) == '*' -> {
-                state = BLOCK_COMMENT; i += 2
+            '"' -> {
+                openDoubleQuotedLiteral()
             }
-            c == '"' -> openDoubleQuote()
-            c == '`' && flavor == Flavor.GENERIC -> {
-                markCode(i); state = TEMPLATE; dollars = 1; i++
+            '\'' -> {
+                openSingleQuotedLiteral()
             }
-            c == '\'' -> openSingleQuote()
-            c == '{' -> {
-                markCode(i); if (stack.isNotEmpty()) holeDepth++; i++
+            '`' -> {
+                openBacktickLiteral()
             }
-            c == '}' -> {
-                if (stack.isNotEmpty() && holeDepth == 0) {
-                    closeHole()
-                } else {
-                    markCode(i); if (stack.isNotEmpty()) holeDepth--; i++
+            '(', '[' -> {
+                markCode(position)
+                bracketDepth++
+                position++
+            }
+            ')', ']' -> {
+                markCode(position)
+                if (bracketDepth > 0) {
+                    bracketDepth--
                 }
+                position++
             }
-            c == ' ' || c == '\t' || c == '\r' -> i++
+            '{' -> {
+                markCode(position)
+                if (interpolationStack.isNotEmpty()) {
+                    holeBraceDepth++
+                }
+                position++
+            }
+            '}' -> {
+                closeBraceOrInterpolationHole()
+            }
+            ' ', '\t', '\r' -> {
+                position++
+            }
             else -> {
-                markCode(i); i++
+                markCode(position)
+                position++
             }
         }
     }
 
-    private fun stepBlockComment(c: Char) {
-        if (c == '*' && peek(1) == '/') {
-            state = NORMAL; i += 2
-        } else i++
-    }
-
-    private fun stepString(c: Char) {
-        when {
-            c == '\\' -> advanceEscape()
-            c == '"' -> {
-                i++; popString()
+    private fun openCommentOrSlash() {
+        when (charRelative(1)) {
+            '/' -> {
+                lexerState = LexerState.LINE_COMMENT
+                position += 2
             }
-            dollars > 0 && c == '{' -> handleInterpOpen()
-            else -> i++
+            '*' -> {
+                lexerState = LexerState.BLOCK_COMMENT
+                position += 2
+            }
+            else -> {
+                markCode(position)
+                position++
+            }
         }
     }
 
-    private fun stepChar(c: Char) {
-        when {
-            c == '\\' -> advanceEscape()
-            c == '\'' -> {
-                i++; state = NORMAL
-            }
-            else -> i++
-        }
-    }
-
-    private fun stepVerbatim(c: Char) {
-        when {
-            c == '"' && peek(1) == '"' -> i += 2
-            c == '"' -> {
-                i++; popString()
-            }
-            dollars > 0 && c == '{' -> handleInterpOpen()
-            else -> i++
-        }
-    }
-
-    private fun stepRawCs(c: Char) {
-        when {
-            c == '"' -> {
-                var q = 0
-                while (i + q < n && text[i + q] == '"') q++
-                i += q
-                if (q >= rawQuotes) popString()
-            }
-            dollars > 0 && c == '{' -> handleInterpOpen()
-            else -> i++
-        }
-    }
-
-    private fun stepRawCpp(c: Char) {
-        if (c == ')' && matchesAt(i + 1, cppDelim) && charAt(i + 1 + cppDelim.length) == '"') {
-            i += 1 + cppDelim.length + 1
-            popString()
+    private fun closeBraceOrInterpolationHole() {
+        if (interpolationStack.isNotEmpty() && holeBraceDepth == 0) {
+            closeInterpolationHole()
             return
         }
-        i++
+        markCode(position)
+        if (interpolationStack.isNotEmpty()) {
+            holeBraceDepth--
+        }
+        position++
     }
 
-    private fun stepTemplate(c: Char) {
-        when {
-            c == '\\' -> advanceEscape()
-            c == '`' -> {
-                i++; popString()
+    private fun stepBlockComment(current: Char) {
+        if (current == '*' && charRelative(1) == '/') {
+            lexerState = LexerState.CODE
+            position += 2
+        } else {
+            position++
+        }
+    }
+
+    private fun stepString(current: Char) {
+        when (current) {
+            '\\' -> {
+                advanceOverEscape()
             }
-            c == '$' && peek(1) == '{' -> {
-                pushHole(); i += 2
+            '"' -> {
+                position++
+                closeStringLiteral()
             }
-            else -> i++
+            '{' -> {
+                stepInterpolationBraceOrSkip()
+            }
+            else -> {
+                position++
+            }
+        }
+    }
+
+    private fun stepCharacterLiteral(current: Char) {
+        when (current) {
+            '\\' -> {
+                advanceOverEscape()
+            }
+            '\'' -> {
+                position++
+                lexerState = LexerState.CODE
+            }
+            else -> {
+                position++
+            }
+        }
+    }
+
+    private fun stepVerbatimString(current: Char) {
+        when (current) {
+            '"' -> {
+                // в verbatim-строке кавычка экранируется удвоением, а не слешем
+                if (charRelative(1) == '"') {
+                    position += 2
+                } else {
+                    position++
+                    closeStringLiteral()
+                }
+            }
+            '{' -> {
+                stepInterpolationBraceOrSkip()
+            }
+            else -> {
+                position++
+            }
+        }
+    }
+
+    private fun stepTripleQuotedString(current: Char) {
+        when (current) {
+            '"' -> {
+                val quoteRun = countRepeated('"', position)
+                position += quoteRun
+                if (quoteRun >= rawQuoteCount) {
+                    closeStringLiteral()
+                }
+            }
+            '{' -> {
+                stepInterpolationBraceOrSkip()
+            }
+            else -> {
+                position++
+            }
+        }
+    }
+
+    private fun stepCppRawString(current: Char) {
+        val isCloser = current == ')' &&
+            matchesAt(position + 1, cppRawDelimiter) &&
+            charAt(position + 1 + cppRawDelimiter.length) == '"'
+
+        if (isCloser) {
+            position += 1 + cppRawDelimiter.length + 1
+            closeStringLiteral()
+            return
+        }
+        position++
+    }
+
+    private fun stepBacktickTemplate(current: Char) {
+        when (current) {
+            '\\' -> {
+                advanceOverEscape()
+            }
+            '`' -> {
+                position++
+                closeStringLiteral()
+            }
+            '$' -> {
+                if (charRelative(1) == '{') {
+                    openInterpolationHole()
+                    position += 2
+                } else {
+                    position++
+                }
+            }
+            else -> {
+                position++
+            }
+        }
+    }
+
+    /** `{` внутри строки: либо открывает дырку интерполяции, либо просто содержимое. */
+    private fun stepInterpolationBraceOrSkip() {
+        if (interpolationDollars > 0) {
+            handleInterpolationBrace()
+        } else {
+            position++
         }
     }
 
     // ---------------------------------------------------------------- открытие литералов
 
-    private fun openDoubleQuote() {
-        val start = i
+    private fun openDoubleQuotedLiteral() {
+        markCode(position)
 
-        // префикс вплотную к кавычке: $ @ R (не заезжая на предыдущую строку)
-        var p = i - 1
-        var d = 0
-        var verbatim = false
-        var cppRaw = false
-        while (p >= lineStart) {
-            val pc = text[p]
-            when {
-                pc == '$' -> {
-                    d++; p--
-                }
-                pc == '@' && flavor == Flavor.CSHARP -> {
-                    verbatim = true; p--
-                }
-                pc == 'R' && flavor == Flavor.CPP -> {
-                    cppRaw = true; break
-                }
-                else -> break
-            }
-        }
-
-        markCode(start)
-
-        if (cppRaw) {
-            var j = i + 1
-            val sb = StringBuilder()
-            while (j < n && text[j] != '(' && text[j] != '\n' && sb.length < 16) {
-                sb.append(text[j]); j++
-            }
-            if (j < n && text[j] == '(') {
-                cppDelim = sb.toString()
-                state = RAW_CPP
-                i = j + 1
-                return
-            }
-            state = STRING; dollars = 0; i++
+        val prefix = readLiteralPrefix()
+        if (prefix.isCppRaw) {
+            openCppRawString()
             return
         }
 
-        var q = 0
-        while (i + q < n && text[i + q] == '"') q++
+        val quoteRun = countRepeated('"', position)
+        if (quoteRun >= 3 && supportsTripleQuotedStrings) {
+            rawQuoteCount = quoteRun
+            interpolationDollars = prefix.dollars
+            lexerState = LexerState.TRIPLE_QUOTED_STRING
+            position += quoteRun
+            return
+        }
+        if (quoteRun == 2) {
+            // пустой литерал "" или @""
+            position += 2
+            return
+        }
 
-        if (q >= 3) {
-            rawQuotes = q; dollars = d; state = RAW_CS; i += q
-            return
+        interpolationDollars = prefix.dollars
+        if (prefix.isVerbatim) {
+            lexerState = LexerState.VERBATIM_STRING
+        } else {
+            lexerState = LexerState.STRING
         }
-        if (q == 2) {
-            i += 2 // пустой литерал "" / @""
-            return
-        }
-        dollars = d
-        state = if (verbatim) VERBATIM else STRING
-        i++
+        position++
     }
 
-    private fun openSingleQuote() {
-        // C++: разделитель разрядов 1'000'000 — это не char-литерал
-        if (flavor == Flavor.CPP &&
-            i > lineStart && text[i - 1].isLetterOrDigit() &&
-            i + 1 < n && text[i + 1].isLetterOrDigit()
+    /** Префикс вплотную к кавычке: `$`, `@`, `R`. За предыдущую строку не заезжаем. */
+    private fun readLiteralPrefix(): LiteralPrefix {
+        var dollars = 0
+        var isVerbatim = false
+        var isCppRaw = false
+        var prefixPosition = position - 1
+
+        while (prefixPosition >= lineStartOffset) {
+            val prefixChar = text[prefixPosition]
+            if (prefixChar == '$') {
+                dollars++
+                prefixPosition--
+                continue
+            }
+            if (prefixChar == '@' && supportsVerbatimStrings) {
+                isVerbatim = true
+                prefixPosition--
+                continue
+            }
+            if (prefixChar == 'R' && supportsCppRawStrings) {
+                isCppRaw = true
+            }
+            break
+        }
+        return LiteralPrefix(dollars, isVerbatim, isCppRaw)
+    }
+
+    private fun openCppRawString() {
+        val delimiter = StringBuilder()
+        var scanPosition = position + 1
+
+        while (scanPosition < textLength &&
+            text[scanPosition] != '(' &&
+            text[scanPosition] != '\n' &&
+            delimiter.length < MAX_CPP_RAW_DELIMITER
         ) {
-            markCode(i); i++
+            delimiter.append(text[scanPosition])
+            scanPosition++
+        }
+
+        if (scanPosition < textLength && text[scanPosition] == '(') {
+            cppRawDelimiter = delimiter.toString()
+            lexerState = LexerState.CPP_RAW_STRING
+            position = scanPosition + 1
             return
         }
-        markCode(i); state = CHAR; i++
+
+        // на raw string не похоже — считаем обычной строкой
+        lexerState = LexerState.STRING
+        interpolationDollars = 0
+        position++
+    }
+
+    private fun openSingleQuotedLiteral() {
+        markCode(position)
+        if (isDigitSeparator()) {
+            position++
+            return
+        }
+        lexerState = LexerState.CHARACTER
+        position++
+    }
+
+    /** C++: в `1'000'000` апостроф разделяет разряды, а не открывает символьный литерал. */
+    private fun isDigitSeparator(): Boolean {
+        if (!supportsDigitSeparatorQuote) {
+            return false
+        }
+        if (position <= lineStartOffset || position + 1 >= textLength) {
+            return false
+        }
+        return text[position - 1].isLetterOrDigit() && text[position + 1].isLetterOrDigit()
+    }
+
+    private fun openBacktickLiteral() {
+        markCode(position)
+        if (supportsBacktickTemplates) {
+            lexerState = LexerState.BACKTICK_TEMPLATE
+            interpolationDollars = 1
+        }
+        position++
     }
 
     // ---------------------------------------------------------------- интерполяция
 
-    private fun handleInterpOpen() {
-        var run = 0
-        while (i + run < n && text[i + run] == '{') run++
-        if (dollars in 1..(run / 2)) { // {{ при $ — экранированная скобка
-            i += 2 * dollars
+    private fun handleInterpolationBrace() {
+        val braceRun = countRepeated('{', position)
+
+        // при одном $ последовательность {{ — это экранированная скобка, а не дырка
+        if (interpolationDollars in 1..(braceRun / 2)) {
+            position += 2 * interpolationDollars
             return
         }
-        if (run >= dollars) {
-            pushHole()
-            i += run
+        if (braceRun >= interpolationDollars) {
+            openInterpolationHole()
+            position += braceRun
             return
         }
-        i += run
+        position += braceRun
     }
 
-    private fun pushHole() {
-        stack.addLast(Frame(state, dollars, rawQuotes, cppDelim, holeDepth))
-        holeDepth = 0
-        state = NORMAL
-        dollars = 0
-        rawQuotes = 0
-        cppDelim = ""
+    private fun openInterpolationHole() {
+        interpolationStack.addLast(
+            InterpolationFrame(
+                lexerState = lexerState,
+                interpolationDollars = interpolationDollars,
+                rawQuoteCount = rawQuoteCount,
+                cppRawDelimiter = cppRawDelimiter,
+                holeBraceDepth = holeBraceDepth,
+            ),
+        )
+        holeBraceDepth = 0
+        lexerState = LexerState.CODE
+        interpolationDollars = 0
+        rawQuoteCount = 0
+        cppRawDelimiter = ""
     }
 
-    private fun closeHole() {
-        val f = stack.removeLast()
-        state = f.state
-        dollars = f.dollars
-        rawQuotes = f.rawQuotes
-        cppDelim = f.delim
-        holeDepth = f.holeDepth
-        i++
+    private fun closeInterpolationHole() {
+        val frame = interpolationStack.removeLast()
+        lexerState = frame.lexerState
+        interpolationDollars = frame.interpolationDollars
+        rawQuoteCount = frame.rawQuoteCount
+        cppRawDelimiter = frame.cppRawDelimiter
+        holeBraceDepth = frame.holeBraceDepth
+        position++
     }
 
-    private fun popString() {
-        state = NORMAL
-        dollars = 0
-        rawQuotes = 0
-        cppDelim = ""
+    /**
+     * Закрывает текущий литерал. Если мы внутри дырки интерполяции, стек не трогаем:
+     * вернуться в объемлющую строку должна закрывающая `}`, а не эта кавычка.
+     */
+    private fun closeStringLiteral() {
+        lexerState = LexerState.CODE
+        interpolationDollars = 0
+        rawQuoteCount = 0
+        cppRawDelimiter = ""
     }
 
     // ---------------------------------------------------------------- построчный разбор
 
-    private fun finishLine(end: Int) {
-        emitLine(end)
-        if (state == LINE_COMMENT || state == STRING || state == CHAR) {
-            // незакрытая однострочная конструкция — рассинхрон дальше не тащим
-            state = NORMAL
-            dollars = 0
+    private fun finishLine(lineEndOffset: Int) {
+        emitLine(lineEndOffset)
+
+        val isUnterminatedSingleLine = lexerState == LexerState.LINE_COMMENT ||
+            lexerState == LexerState.STRING ||
+            lexerState == LexerState.CHARACTER
+
+        if (isUnterminatedSingleLine) {
+            // рассинхрон дальше не тащим
+            lexerState = LexerState.CODE
+            interpolationDollars = 0
         }
-        lineStart = end + 1
-        lineClean = state == NORMAL
-        firstCode = -1
-        lastCode = -1
-    }
 
-    private fun emitLine(end: Int) {
-        if (!lineClean || firstCode < 0 || lastCode < 0) return
+        lineStartOffset = lineEndOffset + 1
+        lineNumber++
+        lineStartsInCode = lexerState == LexerState.CODE
+        firstCodeOffset = -1
+        lastCodeOffset = -1
 
-        var k = lineStart
-        while (k < end && (text[k] == ' ' || text[k] == '\t')) k++
-        val indent = text.subSequence(lineStart, k).toString()
-
-        if (text[lastCode] == '{') {
-            val braceOffset = lastCode
-            if (braceOffset <= firstCode) return // '{' и есть первый код-символ — уже Allman
-
-            val head = text.subSequence(firstCode, braceOffset).toString().trimEnd()
-            if (head.isEmpty()) return
-
-            if (fullAllman && head.startsWith("}")) {
-                val rest = head.substring(1).trimStart()
-                if (isSplitKeyword(rest)) {
-                    add(firstCode + 1, braceOffset + 1, end, indent, listOf(rest, "{"))
-                    return
-                }
-            }
-            add(firstCode + head.length, braceOffset + 1, end, indent, listOf("{"))
-        } else if (fullAllman && text[firstCode] == '}' && lastCode > firstCode) {
-            // "} else" без скобки — тоже разносим
-            val rest = text.subSequence(firstCode + 1, lastCode + 1).toString().trimStart()
-            if (isSplitKeyword(rest)) {
-                add(firstCode + 1, lastCode + 1, end, indent, listOf(rest))
-            }
+        bracketDepthAtLineStart = bracketDepth
+        if (bracketDepth == 0) {
+            statementLineStartOffset = lineStartOffset
+            statementLineNumber = lineNumber
         }
     }
 
-    private fun add(hideStart: Int, hideEnd: Int, anchor: Int, indent: String, lines: List<String>) {
-        if (hideStart >= hideEnd) return
-        result.add(PhantomSite(hideStart, hideEnd, anchor, indent, lines))
+    private fun emitLine(lineEndOffset: Int) {
+        if (!lineStartsInCode) {
+            return
+        }
+        if (firstCodeOffset < 0 || lastCodeOffset < 0) {
+            return
+        }
+
+        val indent = readIndent()
+
+        if (text[lastCodeOffset] == '{') {
+            emitHangingBrace(lastCodeOffset, lineEndOffset, indent)
+            return
+        }
+
+        if (!fullAllman) {
+            return
+        }
+        if (text[firstCodeOffset] != '}' || lastCodeOffset <= firstCodeOffset) {
+            return
+        }
+
+        // "} else" без скобки — тоже разносим
+        val tail = text.subSequence(firstCodeOffset + 1, lastCodeOffset + 1)
+            .toString()
+            .trimStart()
+
+        if (isSplitKeyword(tail)) {
+            addSite(
+                dimStart = firstCodeOffset + 1,
+                dimEnd = lastCodeOffset + 1,
+                anchorOffset = lineEndOffset,
+                indent = indent,
+                phantomLines = listOf(tail),
+            )
+        }
     }
 
-    private fun isSplitKeyword(rest: String): Boolean {
-        for (kw in SPLIT_KEYWORDS) {
-            if (rest.startsWith(kw)) {
-                val after = rest.getOrNull(kw.length)
-                if (after == null || !(after.isLetterOrDigit() || after == '_')) return true
+    private fun emitHangingBrace(braceOffset: Int, lineEndOffset: Int, indent: String) {
+        if (braceOffset <= firstCodeOffset) {
+            // `{` и есть первый код-символ — строка уже в Allman
+            return
+        }
+
+        val head = text.subSequence(firstCodeOffset, braceOffset)
+            .toString()
+            .trimEnd()
+
+        if (head.isEmpty()) {
+            return
+        }
+
+        if (fullAllman && head.startsWith("}")) {
+            val tail = head.substring(1).trimStart()
+            if (isSplitKeyword(tail)) {
+                // гасим всё, что уехало вниз: " else {"
+                addSite(
+                    dimStart = firstCodeOffset + 1,
+                    dimEnd = braceOffset + 1,
+                    anchorOffset = lineEndOffset,
+                    indent = indent,
+                    phantomLines = listOf(tail, "{"),
+                )
+                return
+            }
+        }
+
+        // гасим только саму скобку — пробелы перед ней и так не видно
+        addSite(
+            dimStart = braceOffset,
+            dimEnd = braceOffset + 1,
+            anchorOffset = lineEndOffset,
+            indent = indent,
+            phantomLines = listOf("{"),
+        )
+    }
+
+    /**
+     * Отступ для фантомной строки. Если строка — продолжение незакрытой `(` или `[`,
+     * берём отступ у строки, с которой конструкция началась. Ограничение по длине —
+     * страховка от рассинхрона на несбалансированных скобках.
+     */
+    private fun readIndent(): String {
+        val isContinuation = bracketDepthAtLineStart > 0 &&
+            lineNumber - statementLineNumber in 1..MAX_CONTINUATION_LINES
+
+        val indentStart: Int
+        if (isContinuation) {
+            indentStart = statementLineStartOffset
+        } else {
+            indentStart = lineStartOffset
+        }
+
+        var indentEnd = indentStart
+        while (indentEnd < textLength && (text[indentEnd] == ' ' || text[indentEnd] == '\t')) {
+            indentEnd++
+        }
+        return text.subSequence(indentStart, indentEnd).toString()
+    }
+
+    private fun addSite(
+        dimStart: Int,
+        dimEnd: Int,
+        anchorOffset: Int,
+        indent: String,
+        phantomLines: List<String>,
+    ) {
+        if (dimStart >= dimEnd) {
+            return
+        }
+        foundSites.add(PhantomSite(dimStart, dimEnd, anchorOffset, indent, phantomLines))
+    }
+
+    private fun isSplitKeyword(tail: String): Boolean {
+        for (keyword in SPLIT_KEYWORDS) {
+            if (!tail.startsWith(keyword)) {
+                continue
+            }
+            val following = tail.getOrNull(keyword.length)
+            if (following == null) {
+                return true
+            }
+            if (!following.isLetterOrDigit() && following != '_') {
+                return true
             }
         }
         return false
     }
 
-    // ---------------------------------------------------------------- мелочи
+    // ---------------------------------------------------------------- мелкие помощники
 
-    private fun markCode(idx: Int) {
-        if (firstCode < 0) firstCode = idx
-        lastCode = idx
+    private fun markCode(offset: Int) {
+        if (firstCodeOffset < 0) {
+            firstCodeOffset = offset
+        }
+        lastCodeOffset = offset
     }
 
-    private fun advanceEscape() {
-        // не перепрыгиваем через перевод строки — иначе потеряем разметку строк
-        i += if (i + 1 < n && text[i + 1] != '\n') 2 else 1
+    /** Не перепрыгиваем через перевод строки — иначе потеряем разметку строк. */
+    private fun advanceOverEscape() {
+        if (position + 1 < textLength && text[position + 1] != '\n') {
+            position += 2
+        } else {
+            position++
+        }
     }
 
-    private fun peek(d: Int): Char = charAt(i + d)
+    private fun countRepeated(character: Char, from: Int): Int {
+        var count = 0
+        while (from + count < textLength && text[from + count] == character) {
+            count++
+        }
+        return count
+    }
 
-    private fun charAt(idx: Int): Char = if (idx in 0 until n) text[idx] else ' '
+    private fun charRelative(delta: Int): Char {
+        return charAt(position + delta)
+    }
 
-    private fun matchesAt(idx: Int, s: String): Boolean {
-        if (idx + s.length > n) return false
-        for (k in s.indices) if (text[idx + k] != s[k]) return false
+    private fun charAt(offset: Int): Char {
+        if (offset < 0 || offset >= textLength) {
+            return NO_CHARACTER
+        }
+        return text[offset]
+    }
+
+    private fun matchesAt(offset: Int, candidate: String): Boolean {
+        if (offset + candidate.length > textLength) {
+            return false
+        }
+        for (index in candidate.indices) {
+            if (text[offset + index] != candidate[index]) {
+                return false
+            }
+        }
         return true
     }
 
     companion object {
         private val SPLIT_KEYWORDS = listOf("else", "catch", "finally")
+
+        /** Насколько далеко назад разрешено искать начало многострочной конструкции. */
+        private const val MAX_CONTINUATION_LINES = 40
+
+        /** Возвращается вместо символа за границами документа. */
+        private val NO_CHARACTER = Char.MIN_VALUE
+
+        /** По стандарту разделитель в `R"delim(` не длиннее 16 символов. */
+        private const val MAX_CPP_RAW_DELIMITER = 16
     }
 }
