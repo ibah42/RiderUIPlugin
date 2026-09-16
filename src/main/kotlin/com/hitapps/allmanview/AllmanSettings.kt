@@ -19,6 +19,12 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         /** true — разносим ещё и `} else {` на три строки; false — только висящую `{`. */
         var fullAllman: Boolean by property(true)
 
+        /** Разносить `if (x) return;` на две строки. */
+        var splitStatements: Boolean by property(true)
+
+        /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
+        var expandInlineBlocks: Boolean by property(true)
+
         /** Гасить исходный текст, который визуально уехал вниз. */
         var dimOriginal: Boolean by property(true)
 

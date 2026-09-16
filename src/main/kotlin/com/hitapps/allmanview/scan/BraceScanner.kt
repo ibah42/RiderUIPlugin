@@ -21,6 +21,21 @@ enum class Flavor {
     GENERIC,
 }
 
+/** Что именно разносить. */
+data class ScanOptions(
+    /** Разносить `} else {` на три строки, а не только висящую `{`. */
+    val fullAllman: Boolean = true,
+
+    /** Разносить `if (x) return;` на две строки. */
+    val splitStatements: Boolean = true,
+
+    /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
+    val expandInlineBlocks: Boolean = true,
+
+    /** Один уровень отступа: четыре пробела, два пробела или таб. */
+    val indentUnit: String = "    ",
+)
+
 /**
  * Одно место, где мы визуально ломаем строку на Allman.
  *
@@ -31,7 +46,8 @@ enum class Flavor {
  * @param dimEnd offset конца гасимого куска (exclusive)
  * @param anchorOffset offset конца строки-владельца — якорь для block inlay
  * @param indent ведущий whitespace строки-владельца, как есть (табы/пробелы)
- * @param phantomLines что рисуем фантомными строками, сверху вниз
+ * @param phantomLines что рисуем фантомными строками, сверху вниз; собственный отступ
+ *   вложенных строк уже включён в текст
  */
 data class PhantomSite(
     val dimStart: Int,
@@ -83,6 +99,24 @@ private class LiteralPrefix(
 )
 
 /**
+ * Заголовок управляющей конструкции в начале строки: `if (x)`, `foreach (var a in b)`,
+ * `else`, `} catch (E e)`.
+ */
+private class LineHeader(
+    /** offset начала заголовка — уже после ведущей `}`, если она есть. */
+    val headerStart: Int,
+
+    /** offset сразу после заголовка. */
+    val headerEnd: Int,
+
+    /** Строка начинается с `}`, которую надо оставить на своём месте. */
+    val hasLeadingCloseBrace: Boolean,
+
+    /** Первое ключевое слово заголовка: `if`, `else`, `catch`, `while`. */
+    val firstKeyword: String,
+)
+
+/**
  * Линейный скан документа. Никаких зависимостей от IntelliJ — чистая функция от текста.
  *
  * Однострочные состояния (строка в кавычках, символьный литерал, `//`) принудительно
@@ -92,7 +126,7 @@ private class LiteralPrefix(
 class BraceScanner(
     private val text: CharSequence,
     private val flavor: Flavor,
-    private val fullAllman: Boolean,
+    private val options: ScanOptions = ScanOptions(),
 ) {
     // Возможности диалекта. Держим флагами, а не сравнениями с enum по всему коду:
     // языков много, а различаются они ровно тем, как устроены строковые литералы.
@@ -118,6 +152,15 @@ class BraceScanner(
 
     private var firstCodeOffset = -1
     private var lastCodeOffset = -1
+
+    /**
+     * Offsets круглых скобок и фигурных скобок, закрывшихся на верхнем уровне этой строки.
+     * Позволяют резать строку по offset-ам, а не разбором подстроки: подстрока может
+     * содержать литерал со скобками внутри, а эти offsets лексер уже отфильтровал.
+     */
+    private val lineParenCloseOffsets = ArrayList<Int>()
+    private val lineBraceOpenOffsets = ArrayList<Int>()
+    private val lineBraceCloseOffsets = ArrayList<Int>()
 
     // --- многострочные конструкции ---
 
@@ -203,11 +246,16 @@ class BraceScanner(
                 if (bracketDepth > 0) {
                     bracketDepth--
                 }
+                if (bracketDepth == 0 && current == ')') {
+                    remember(lineParenCloseOffsets, position)
+                }
                 position++
             }
             '{' -> {
                 markCode(position)
-                if (interpolationStack.isNotEmpty()) {
+                if (interpolationStack.isEmpty()) {
+                    remember(lineBraceOpenOffsets, position)
+                } else {
                     holeBraceDepth++
                 }
                 position++
@@ -248,7 +296,9 @@ class BraceScanner(
             return
         }
         markCode(position)
-        if (interpolationStack.isNotEmpty()) {
+        if (interpolationStack.isEmpty()) {
+            remember(lineBraceCloseOffsets, position)
+        } else {
             holeBraceDepth--
         }
         position++
@@ -572,6 +622,9 @@ class BraceScanner(
         lineStartsInCode = lexerState == LexerState.CODE
         firstCodeOffset = -1
         lastCodeOffset = -1
+        lineParenCloseOffsets.clear()
+        lineBraceOpenOffsets.clear()
+        lineBraceCloseOffsets.clear()
 
         bracketDepthAtLineStart = bracketDepth
         if (bracketDepth == 0) {
@@ -594,28 +647,11 @@ class BraceScanner(
             emitHangingBrace(lastCodeOffset, lineEndOffset, indent)
             return
         }
-
-        if (!fullAllman) {
+        if (text[lastCodeOffset] == '}' && options.expandInlineBlocks) {
+            emitInlineBlock(lineEndOffset, indent)
             return
         }
-        if (text[firstCodeOffset] != '}' || lastCodeOffset <= firstCodeOffset) {
-            return
-        }
-
-        // "} else" без скобки — тоже разносим
-        val tail = text.subSequence(firstCodeOffset + 1, lastCodeOffset + 1)
-            .toString()
-            .trimStart()
-
-        if (isSplitKeyword(tail)) {
-            addSite(
-                dimStart = firstCodeOffset + 1,
-                dimEnd = lastCodeOffset + 1,
-                anchorOffset = lineEndOffset,
-                indent = indent,
-                phantomLines = listOf(tail),
-            )
-        }
+        emitStatementSplit(lineEndOffset, indent)
     }
 
     private fun emitHangingBrace(braceOffset: Int, lineEndOffset: Int, indent: String) {
@@ -632,7 +668,7 @@ class BraceScanner(
             return
         }
 
-        if (fullAllman && head.startsWith("}")) {
+        if (options.fullAllman && head.startsWith("}")) {
             val tail = head.substring(1).trimStart()
             if (isSplitKeyword(tail)) {
                 // гасим всё, что уехало вниз: " else {"
@@ -655,6 +691,183 @@ class BraceScanner(
             indent = indent,
             phantomLines = listOf("{"),
         )
+    }
+
+    /**
+     * `if (x) { Foo(); }` → заголовок остаётся, а блок разворачивается на три строки.
+     *
+     * Заголовок обязан быть управляющей конструкцией, иначе под правило попало бы
+     * автосвойство `public int X { get; set; }`, которое разносить не надо.
+     */
+    private fun emitInlineBlock(lineEndOffset: Int, indent: String) {
+        val header = parseLineHeader()
+        if (header == null) {
+            return
+        }
+        val openCount = countOffsetsAtOrAfter(lineBraceOpenOffsets, header.headerEnd)
+        val closeCount = countOffsetsAtOrAfter(lineBraceCloseOffsets, header.headerEnd)
+        if (openCount == 0 || openCount != closeCount) {
+            return
+        }
+        if (lineBraceCloseOffsets.last() != lastCodeOffset) {
+            return
+        }
+
+        val openOffset = firstOffsetAtOrAfter(lineBraceOpenOffsets, header.headerEnd)
+        if (openOffset < 0) {
+            return
+        }
+
+        val inner = text.subSequence(openOffset + 1, lastCodeOffset).toString().trim()
+        val blockLines = ArrayList<String>()
+        blockLines.add("{")
+        if (inner.isNotEmpty()) {
+            blockLines.add(options.indentUnit + inner)
+        }
+        blockLines.add("}")
+
+        if (movesLeadingCloseBrace(header)) {
+            val headerText = text.subSequence(header.headerStart, header.headerEnd).toString().trim()
+            val phantomLines = ArrayList<String>()
+            phantomLines.add(headerText)
+            phantomLines.addAll(blockLines)
+
+            addSite(
+                dimStart = firstCodeOffset + 1,
+                dimEnd = lastCodeOffset + 1,
+                anchorOffset = lineEndOffset,
+                indent = indent,
+                phantomLines = phantomLines,
+            )
+            return
+        }
+
+        addSite(
+            dimStart = openOffset,
+            dimEnd = lastCodeOffset + 1,
+            anchorOffset = lineEndOffset,
+            indent = indent,
+            phantomLines = blockLines,
+        )
+    }
+
+    /**
+     * `if (x) return;` → заголовок остаётся, инструкция уезжает вниз с отступом.
+     * Сюда же попадает `} else` без инструкции — он разносится по правилам полного Allman.
+     */
+    private fun emitStatementSplit(lineEndOffset: Int, indent: String) {
+        val header = parseLineHeader()
+        if (header == null) {
+            return
+        }
+
+        val statementStart = skipSpacesFrom(header.headerEnd)
+        val statement = text.subSequence(header.headerEnd, lastCodeOffset + 1).toString().trim()
+        val headerText = text.subSequence(header.headerStart, header.headerEnd).toString().trim()
+
+        // пустая инструкция `while (x);` и голое `{` — не наш случай
+        val hasStatement = statement.isNotEmpty() &&
+            statement != ";" &&
+            !statement.startsWith("{") &&
+            options.splitStatements
+
+        if (movesLeadingCloseBrace(header)) {
+            if (headerText.isEmpty()) {
+                return
+            }
+            val phantomLines = ArrayList<String>()
+            phantomLines.add(headerText)
+            if (hasStatement) {
+                phantomLines.add(options.indentUnit + statement)
+            }
+            addSite(
+                dimStart = firstCodeOffset + 1,
+                dimEnd = lastCodeOffset + 1,
+                anchorOffset = lineEndOffset,
+                indent = indent,
+                phantomLines = phantomLines,
+            )
+            return
+        }
+
+        if (!hasStatement) {
+            return
+        }
+        addSite(
+            dimStart = statementStart,
+            dimEnd = lastCodeOffset + 1,
+            anchorOffset = lineEndOffset,
+            indent = indent,
+            phantomLines = listOf(options.indentUnit + statement),
+        )
+    }
+
+    /**
+     * Разбирает заголовок управляющей конструкции в начале строки.
+     *
+     * Режем по offset-ам, которые проставил лексер, а не по подстроке: в `if (Check(")")) Foo();`
+     * наивный поиск закрывающей скобки нашёл бы её внутри литерала.
+     */
+    private fun parseLineHeader(): LineHeader? {
+        var cursor = firstCodeOffset
+        var hasLeadingCloseBrace = false
+
+        if (text[cursor] == '}') {
+            hasLeadingCloseBrace = true
+            cursor = skipSpacesFrom(cursor + 1)
+            if (cursor > lastCodeOffset) {
+                return null
+            }
+        }
+
+        val headerStart = cursor
+        var firstKeyword = ""
+
+        while (true) {
+            val keyword = matchKeywordAt(cursor)
+            if (keyword == null) {
+                break
+            }
+            if (firstKeyword.isEmpty()) {
+                firstKeyword = keyword
+            }
+            cursor = skipSpacesFrom(cursor + keyword.length)
+
+            if (cursor <= lastCodeOffset && text[cursor] == '(') {
+                val closeOffset = firstOffsetAtOrAfter(lineParenCloseOffsets, cursor)
+                if (closeOffset < 0) {
+                    return null
+                }
+                cursor = skipSpacesFrom(closeOffset + 1)
+                break
+            }
+            if (keyword in KEYWORDS_REQUIRING_PARENS) {
+                // `using System.Text;` — директива, а не конструкция со скобками
+                return null
+            }
+            if (keyword != "else") {
+                break
+            }
+        }
+
+        if (firstKeyword.isEmpty()) {
+            return null
+        }
+        return LineHeader(headerStart, cursor, hasLeadingCloseBrace, firstKeyword)
+    }
+
+    private fun matchKeywordAt(offset: Int): String? {
+        for (keyword in HEADER_KEYWORDS) {
+            if (!matchesAt(offset, keyword)) {
+                continue
+            }
+            val following = charAt(offset + keyword.length)
+            if (following.isLetterOrDigit() || following == '_') {
+                continue
+            }
+            return keyword
+        }
+        return null
     }
 
     /**
@@ -690,6 +903,9 @@ class BraceScanner(
         if (dimStart >= dimEnd) {
             return
         }
+        if (phantomLines.isEmpty()) {
+            return
+        }
         foundSites.add(PhantomSite(dimStart, dimEnd, anchorOffset, indent, phantomLines))
     }
 
@@ -716,6 +932,47 @@ class BraceScanner(
             firstCodeOffset = offset
         }
         lastCodeOffset = offset
+    }
+
+    private fun skipSpacesFrom(offset: Int): Int {
+        var cursor = offset
+        while (cursor <= lastCodeOffset && (text[cursor] == ' ' || text[cursor] == '\t')) {
+            cursor++
+        }
+        return cursor
+    }
+
+    private fun remember(offsets: MutableList<Int>, offset: Int) {
+        if (offsets.size < MAX_TRACKED_OFFSETS) {
+            offsets.add(offset)
+        }
+    }
+
+    /** Ведущая `}` строки в баланс блока не входит — считаем только то, что после заголовка. */
+    private fun countOffsetsAtOrAfter(offsets: List<Int>, from: Int): Int {
+        var count = 0
+        for (offset in offsets) {
+            if (offset >= from) {
+                count++
+            }
+        }
+        return count
+    }
+
+    private fun movesLeadingCloseBrace(header: LineHeader): Boolean {
+        if (!header.hasLeadingCloseBrace || !options.fullAllman) {
+            return false
+        }
+        return header.firstKeyword in SPLIT_KEYWORDS
+    }
+
+    private fun firstOffsetAtOrAfter(offsets: List<Int>, from: Int): Int {
+        for (offset in offsets) {
+            if (offset >= from) {
+                return offset
+            }
+        }
+        return -1
     }
 
     /** Не перепрыгиваем через перевод строки — иначе потеряем разметку строк. */
@@ -759,15 +1016,31 @@ class BraceScanner(
     }
 
     companion object {
-        private val SPLIT_KEYWORDS = listOf("else", "catch", "finally")
+        private val SPLIT_KEYWORDS = setOf("else", "catch", "finally")
+
+        /** Ключевые слова, с которых может начинаться разносимая конструкция. */
+        private val HEADER_KEYWORDS = listOf(
+            "foreach", "finally", "while", "catch", "fixed", "using", "lock", "else", "for", "if",
+        )
+
+        /**
+         * Без круглых скобок эти слова означают что-то другое:
+         * `using System;` — директива, `for` без скобок не бывает вовсе.
+         */
+        private val KEYWORDS_REQUIRING_PARENS = setOf(
+            "if", "for", "foreach", "while", "using", "lock", "fixed",
+        )
 
         /** Насколько далеко назад разрешено искать начало многострочной конструкции. */
         private const val MAX_CONTINUATION_LINES = 40
 
-        /** Возвращается вместо символа за границами документа. */
-        private val NO_CHARACTER = Char.MIN_VALUE
-
         /** По стандарту разделитель в `R"delim(` не длиннее 16 символов. */
         private const val MAX_CPP_RAW_DELIMITER = 16
+
+        /** Сколько скобок на строке запоминаем; дальше строка явно не про нас. */
+        private const val MAX_TRACKED_OFFSETS = 16
+
+        /** Возвращается вместо символа за границами документа. */
+        private val NO_CHARACTER = Char.MIN_VALUE
     }
 }

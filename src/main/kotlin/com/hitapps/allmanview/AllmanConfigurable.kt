@@ -28,6 +28,16 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         .bindSelected(config::fullAllman)
                 }
                 row {
+                    checkBox("Разносить однострочные if / for / foreach / while / using / lock")
+                        .bindSelected(config::splitStatements)
+                        .comment("if (x) return;  →  if (x) ⏎ return;")
+                }
+                row {
+                    checkBox("Разворачивать однострочный блок в скобках")
+                        .bindSelected(config::expandInlineBlocks)
+                        .comment("if (x) { Foo(); }  →  if (x) ⏎ { ⏎ Foo(); ⏎ }")
+                }
+                row {
                     checkBox("Гасить исходный текст серым")
                         .bindSelected(config::dimOriginal)
                         .comment(

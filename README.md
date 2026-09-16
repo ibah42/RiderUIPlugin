@@ -15,6 +15,29 @@ if (x) {                         if (x)
                                  }
 ```
 
+Одиночные инструкции тоже переносятся:
+
+```
+// в файле лежит                          // в редакторе видно
+if (body == null) return;                 if (body == null) return;
+                                              return;
+
+foreach (var x in items) Sum += x;        foreach (var x in items) Sum += x;
+                                              Sum += x;
+
+if (verbose) { Log(id); }                 if (verbose) { Log(id); }
+                                          {
+                                              Log(id);
+                                          }
+```
+
+Серым — реальный текст, чёрным — фантом. Разносятся `if`, `else`, `for`, `foreach`, `while`,
+`using`, `lock`, `fixed`. Всё это отключается по отдельности в настройках.
+
+Намеренно **не** трогаются конструкции, где одна строка уместна: `using System.Text;`
+(директива, а не блок), `do { } while (x);`, `public int X { get; set; }`,
+`void M() { }`, `while (reader.Read());`, инициализаторы `new Point { X = 1 }`.
+
 ## Как это сделано
 
 Исходный текст **остаётся на месте** — он просто гасится, а рядом дорисовывается фантом.

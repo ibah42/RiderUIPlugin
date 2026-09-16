@@ -4,6 +4,7 @@ import com.hitapps.allmanview.scan.BraceScanner
 import com.hitapps.allmanview.scan.Dialects
 import com.hitapps.allmanview.scan.Flavor
 import com.hitapps.allmanview.scan.PhantomSite
+import com.hitapps.allmanview.scan.ScanOptions
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.Editor
@@ -77,7 +78,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         val sites = BraceScanner(
             editor.document.immutableCharSequence,
             flavor,
-            settings.state.fullAllman,
+            scanOptions(settings),
         ).scan()
 
         if (sites.isEmpty()) {
@@ -102,6 +103,25 @@ class AllmanController(private val editor: Editor) : Disposable {
             }
             addPhantomLines(site)
         }
+    }
+
+    private fun scanOptions(settings: AllmanSettings): ScanOptions {
+        return ScanOptions(
+            fullAllman = settings.state.fullAllman,
+            splitStatements = settings.state.splitStatements,
+            expandInlineBlocks = settings.state.expandInlineBlocks,
+            indentUnit = indentUnit(),
+        )
+    }
+
+    /** Один уровень отступа — как настроен в самой IDE для этого файла. */
+    private fun indentUnit(): String {
+        val project = editor.project
+        if (editor.settings.isUseTabCharacter(project)) {
+            return "\t"
+        }
+        val tabSize = editor.settings.getTabSize(project).coerceAtLeast(1)
+        return " ".repeat(tabSize)
     }
 
     private fun dimOriginalText(site: PhantomSite, attributes: TextAttributes) {

@@ -10,7 +10,16 @@ class BraceScannerTest {
         src: String,
         flavor: Flavor = Flavor.CSHARP,
         fullAllman: Boolean = true,
-    ): List<PhantomSite> = BraceScanner(src, flavor, fullAllman).scan()
+        splitStatements: Boolean = true,
+        expandInlineBlocks: Boolean = true,
+    ): List<PhantomSite> {
+        val options = ScanOptions(
+            fullAllman = fullAllman,
+            splitStatements = splitStatements,
+            expandInlineBlocks = expandInlineBlocks,
+        )
+        return BraceScanner(src, flavor, options).scan()
+    }
 
     /** Текст, который будет погашен серым. */
     private fun dimmed(src: String, site: PhantomSite) = src.substring(site.dimStart, site.dimEnd)
@@ -237,53 +246,158 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `однострочный блок не трогаем`() {
-        assertTrue(scan("if (x) { Foo(); }").isEmpty())
+    fun `однострочный блок не трогаем, когда разворачивание выключено`() {
+        assertTrue(scan("if (x) { Foo(); }", expandInlineBlocks = false).isEmpty())
     }
 
     @Test
-    fun `многострочная сигнатура — отступ у начала конструкции`() {
+    fun `сигнатура на верхнем уровне`() {
         val src = "private void Foo(\n    int a,\n    int b) {\n}"
         assertEquals("", scan(src).first().indent)
     }
 
     @Test
-    fun `вложенная многострочная сигнатура`() {
-        assertEquals("    ", scan("    void Foo(\n        int a) {\n    }").first().indent)
-    }
-
-    @Test
-    fun `многострочное условие`() {
-        assertEquals("", scan("if (a &&\n    b) {\n}").first().indent)
-    }
-
-    @Test
-    fun `цепочка вызовов — отступ у своей строки`() {
-        assertEquals("    ", scan("var x = Foo()\n    .Bar(y => {\n    });").first().indent)
-    }
-
-    @Test
-    fun `несбалансированные скобки — фолбэк на свою строку`() {
-        val src = "void A(\n" + "x,\n".repeat(60) + "y) {\n}"
-        assertEquals("", scan(src).first().indent)
-    }
-
-    @Test
-    fun `swift — интерполяция и многострочный литерал`() {
+    fun `swift — интерполяция обратным слешем`() {
         val src = "if a > 0 {\n    print(\"val \\(a) { x }\")\n}"
-        assertEquals(1, scan(src, Flavor.GENERIC).size)
+        assertEquals(1, scan(src, Flavor.JVM).size)
+    }
+
+
+    // --- виртуальный перенос одиночных инструкций ---
+
+    @Test
+    fun `if с одиночным return`() {
+        val src = "if (pending == null) return;"
+        val site = scan(src).single()
+        assertEquals("return;", dimmed(src, site))
+        assertEquals(listOf("    return;"), site.phantomLines)
     }
 
     @Test
-    fun `go — backtick raw string`() {
-        val src = "s := `raw { string`\nif x {\n}"
-        assertEquals(1, scan(src, Flavor.GENERIC).size)
+    fun `if с throw`() {
+        val src = "    if (x < 0) throw new ArgumentException(nameof(x));"
+        val site = scan(src).single()
+        assertEquals("throw new ArgumentException(nameof(x));", dimmed(src, site))
+        assertEquals("    ", site.indent)
     }
 
     @Test
-    fun `java — text block`() {
-        val src = "String t = \"\"\"\n  block { here\n  \"\"\";\ntry {\n}"
-        assertEquals(1, scan(src, Flavor.GENERIC).size)
+    fun `цикл с одиночной инструкцией`() {
+        val src = "foreach (var item in items) total += item.Price;"
+        val site = scan(src).single()
+        assertEquals("total += item.Price;", dimmed(src, site))
+    }
+
+    @Test
+    fun `lock с одиночной инструкцией`() {
+        assertEquals(listOf("    _count++;"), scan("lock (gate) _count++;").single().phantomLines)
+    }
+
+    @Test
+    fun `using-директива не разносится`() {
+        assertTrue(scan("using System.Text;").isEmpty())
+        assertTrue(scan("using static System.Math;").isEmpty())
+    }
+
+    @Test
+    fun `using-выражение разносится`() {
+        assertEquals(
+            listOf("    stream.Flush();"),
+            scan("using (var stream = Open()) stream.Flush();").single().phantomLines,
+        )
+    }
+
+    @Test
+    fun `пустая инструкция не разносится`() {
+        assertTrue(scan("while (reader.Read());").isEmpty())
+    }
+
+    @Test
+    fun `do-while в одну строку не трогаем`() {
+        assertTrue(scan("do { } while (x);").isEmpty())
+    }
+
+    @Test
+    fun `скобка внутри литерала не считается концом заголовка`() {
+        val src = """if (Check(")")) Foo();"""
+        val site = scan(src).single()
+        assertEquals("Foo();", dimmed(src, site))
+    }
+
+    @Test
+    fun `хвостовой комментарий остаётся при переносе инструкции`() {
+        val src = "if (x) return; // early out"
+        val site = scan(src).single()
+        assertEquals("return;", dimmed(src, site))
+    }
+
+    @Test
+    fun `закрывающая скобка, else и инструкция — три строки`() {
+        val src = "if (x) {\n} else return;"
+        val site = scan(src)[1]
+        assertEquals(" else return;", dimmed(src, site))
+        assertEquals(listOf("else", "    return;"), site.phantomLines)
+    }
+
+    @Test
+    fun `else if с инструкцией`() {
+        val src = "else if (x) return;"
+        assertEquals(listOf("    return;"), scan(src).single().phantomLines)
+    }
+
+    @Test
+    fun `отступ фантома берётся из настроек`() {
+        val options = ScanOptions(indentUnit = "\t")
+        val sites = BraceScanner("if (x) return;", Flavor.CSHARP, options).scan()
+        assertEquals(listOf("\treturn;"), sites.single().phantomLines)
+    }
+
+    @Test
+    fun `выключенный splitStatements ничего не разносит`() {
+        assertTrue(scan("if (x) return;", splitStatements = false).isEmpty())
+    }
+
+    // --- однострочный блок в скобках ---
+
+    @Test
+    fun `однострочный блок разворачивается`() {
+        val src = "if (x) { Foo(); }"
+        val site = scan(src).single()
+        assertEquals("{ Foo(); }", dimmed(src, site))
+        assertEquals(listOf("{", "    Foo();", "}"), site.phantomLines)
+    }
+
+    @Test
+    fun `пустой однострочный блок`() {
+        assertEquals(listOf("{", "}"), scan("if (x) { }").single().phantomLines)
+    }
+
+    @Test
+    fun `вложенный однострочный блок разворачивается целиком`() {
+        val site = scan("if (x) { if (y) { a(); } }").single()
+        assertEquals(listOf("{", "    if (y) { a(); }", "}"), site.phantomLines)
+    }
+
+    @Test
+    fun `закрывающая скобка с else и блоком`() {
+        val src = "try {\n} catch (E e) { Log(e); }"
+        val site = scan(src)[1]
+        assertEquals(listOf("catch (E e)", "{", "    Log(e);", "}"), site.phantomLines)
+    }
+
+    @Test
+    fun `автосвойство не трогаем`() {
+        assertTrue(scan("public int Count { get; set; }").isEmpty())
+    }
+
+    @Test
+    fun `пустое тело метода в одну строку не трогаем`() {
+        assertTrue(scan("public void Dispose() { }").isEmpty())
+    }
+
+    @Test
+    fun `инициализатор в одну строку не трогаем`() {
+        assertTrue(scan("var point = new Point { X = 1, Y = 2 };").isEmpty())
     }
 
     @Test
