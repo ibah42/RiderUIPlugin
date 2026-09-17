@@ -5,18 +5,11 @@ import com.intellij.ide.ui.UISettings
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorCustomElementRenderer
 import com.intellij.openapi.editor.Inlay
-import com.intellij.openapi.editor.colors.EditorColorsScheme
 import com.intellij.openapi.editor.colors.EditorFontType
-import com.intellij.openapi.editor.ex.EditorEx
-import com.intellij.openapi.editor.ex.MarkupModelEx
-import com.intellij.openapi.editor.ex.RangeHighlighterEx
 import com.intellij.openapi.editor.ex.util.EditorUtil
-import com.intellij.openapi.editor.impl.DocumentMarkupModel
-import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.editor.markup.TextAttributes
 import java.awt.Color
 import java.awt.Font
-import java.awt.FontMetrics
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Rectangle
@@ -29,10 +22,16 @@ import java.awt.Rectangle
  *
  * Подсветка фантома берётся у настоящего текста: каждый символ фантома лежит в документе
  * по известному offset-у, поэтому цвет и начертание можно спросить у редактора.
+ *
+ * @param braceStyles оформление скобок типов и функций, по offset-у скобки. Оно живёт
+ *   в `editor.markupModel`, куда [EditorColorSampler] не смотрит, поэтому его приходится
+ *   передавать отдельно. Тень фантомной скобки рисуется здесь же — иначе в K&R-коде
+ *   она была бы только у реальной скобки, которой не видно.
  */
 class PhantomLineRenderer(
     private val indent: String,
     private val phantomLines: List<PhantomLine>,
+    private val braceStyles: Map<Int, BraceStyle>,
 ) : EditorCustomElementRenderer {
 
     override fun calcHeightInPixels(inlay: Inlay<*>): Int {
@@ -71,9 +70,9 @@ class PhantomLineRenderer(
         for ((lineIndex, line) in phantomLines.withIndex()) {
             val lineTop = targetRegion.y + lineIndex * lineHeight
             val baseline = lineTop + (lineHeight + fontMetrics.ascent - fontMetrics.descent) / 2
-            val x = targetRegion.x + startColumn(editor, line) * columnWidth(editor)
+            val lineX = targetRegion.x + startColumn(editor, line) * columnWidth(editor)
 
-            paintLine(editor, graphics, line, x, baseline, plainFont, defaultForeground)
+            paintLine(editor, graphics, line, lineX, baseline, plainFont, defaultForeground)
         }
     }
 
@@ -86,115 +85,66 @@ class PhantomLineRenderer(
         plainFont: Font,
         defaultForeground: Color,
     ) {
-        val highlighting = collectHighlighting(editor, line)
-        var x = startX
+        val style = styleOf(editor, line)
+        var currentX = startX
         var runStart = 0
 
         while (runStart < line.text.length) {
             var runEnd = runStart + 1
-            while (runEnd < line.text.length && highlighting.sameRun(runStart, runEnd)) {
+            while (runEnd < line.text.length && style.sameStyle(runStart, runEnd)) {
                 runEnd++
             }
 
             val chunk = line.text.substring(runStart, runEnd)
-            val font = plainFont.deriveFont(highlighting.fontStyles[runStart])
+            val font = plainFont.deriveFont(style.fontStyles[runStart])
             graphics.font = font
-            graphics.color = highlighting.colors[runStart] ?: defaultForeground
-            graphics.drawString(chunk, x, baseline)
 
-            x += graphics.getFontMetrics(font).stringWidth(chunk)
+            paintShadow(graphics, chunk, line.sourceOffset + runStart, currentX, baseline)
+
+            graphics.color = style.colors[runStart] ?: defaultForeground
+            graphics.drawString(chunk, currentX, baseline)
+
+            currentX += graphics.getFontMetrics(font).stringWidth(chunk)
             runStart = runEnd
         }
     }
 
-    /**
-     * Цвет и начертание для каждого символа фантома.
-     *
-     * Два источника, в порядке приоритета: лексер редактора и разметка документа.
-     * В Rider подсветка C# приходит из бэкенда ReSharper именно разметкой, поэтому
-     * одного лексера здесь мало.
-     */
-    private fun collectHighlighting(editor: Editor, line: PhantomLine): LineHighlighting {
-        val length = line.text.length
-        val result = LineHighlighting(arrayOfNulls(length), IntArray(length) { Font.PLAIN })
-
-        if (line.sourceOffset < 0) {
-            return result
-        }
-
-        val start = line.sourceOffset
-        val end = start + length
-        if (end > editor.document.textLength) {
-            return result
-        }
-
-        val scheme = editor.colorsScheme
-        applyLexerAttributes(editor, result, start, end)
-        applyMarkupAttributes(editor, result, start, end, scheme)
-        return result
-    }
-
-    private fun applyLexerAttributes(
-        editor: Editor,
-        target: LineHighlighting,
-        start: Int,
-        end: Int,
+    /** Тень рисуется до самого глифа, поэтому ложится под него. */
+    private fun paintShadow(
+        graphics: Graphics,
+        chunk: String,
+        sourceOffset: Int,
+        currentX: Int,
+        baseline: Int,
     ) {
-        val editorEx = editor as? EditorEx
-        if (editorEx == null) {
+        val braceStyle = braceStyles[sourceOffset]
+        if (braceStyle == null) {
+            return
+        }
+        val shadowColor = braceStyle.shadowColor
+        if (shadowColor == null) {
             return
         }
 
-        val iterator = editorEx.highlighter.createIterator(start)
-        while (!iterator.atEnd() && iterator.start < end) {
-            target.apply(start, end, iterator.start, iterator.end, iterator.textAttributes)
-            iterator.advance()
-        }
+        graphics.color = shadowColor
+        graphics.drawString(
+            chunk,
+            currentX + braceStyle.shadowOffsetX,
+            baseline + braceStyle.shadowOffsetY,
+        )
     }
 
-    private fun applyMarkupAttributes(
-        editor: Editor,
-        target: LineHighlighting,
-        start: Int,
-        end: Int,
-        scheme: EditorColorsScheme,
-    ) {
-        val project = editor.project
-        if (project == null) {
-            return
-        }
+    private fun styleOf(editor: Editor, line: PhantomLine): TextStyleRun {
+        val style = EditorColorSampler.styleOf(editor, line.sourceOffset, line.text.length)
 
-        val markup = DocumentMarkupModel.forDocument(editor.document, project, false)
-        if (markup !is MarkupModelEx) {
-            return
-        }
-
-        val overlapping = ArrayList<RangeHighlighterEx>()
-        markup.processRangeHighlightersOverlappingWith(start, end) { highlighter ->
-            overlapping.add(highlighter)
-            true
-        }
-
-        // Слой определяет, кто кого перекрывает, а порядок обхода его не гарантирует.
-        overlapping.sortBy { it.layer }
-        for (highlighter in overlapping) {
-            val attributes = attributesOf(highlighter, scheme)
-            target.apply(start, end, highlighter.startOffset, highlighter.endOffset, attributes)
-        }
-    }
-
-    private fun attributesOf(
-        highlighter: RangeHighlighter,
-        scheme: EditorColorsScheme,
-    ): TextAttributes? {
-        val key = highlighter.textAttributesKey
-        if (key != null) {
-            val fromKey = scheme.getAttributes(key)
-            if (fromKey != null) {
-                return fromKey
+        // Скобка типа или функции красится поверх обычной подсветки.
+        for (index in line.text.indices) {
+            val braceStyle = braceStyles[line.sourceOffset + index]
+            if (braceStyle != null) {
+                style.apply(0, line.text.length, index, index + 1, braceStyle.attributes)
             }
         }
-        return highlighter.getTextAttributes(scheme)
+        return style
     }
 
     private fun columnWidth(editor: Editor): Int {
@@ -223,45 +173,6 @@ class PhantomLineRenderer(
             }
         }
         return columns
-    }
-
-    /** Подсветка фантомной строки посимвольно. */
-    private class LineHighlighting(
-        val colors: Array<Color?>,
-        val fontStyles: IntArray,
-    ) {
-        fun apply(
-            rangeStart: Int,
-            rangeEnd: Int,
-            attributeStart: Int,
-            attributeEnd: Int,
-            attributes: TextAttributes?,
-        ) {
-            if (attributes == null) {
-                return
-            }
-            val foreground = attributes.foregroundColor
-            val fontStyle = attributes.fontType
-            if (foreground == null && fontStyle == Font.PLAIN) {
-                return
-            }
-
-            val from = maxOf(attributeStart, rangeStart)
-            val to = minOf(attributeEnd, rangeEnd)
-            for (offset in from until to) {
-                val index = offset - rangeStart
-                if (foreground != null) {
-                    colors[index] = foreground
-                }
-                if (fontStyle != Font.PLAIN) {
-                    fontStyles[index] = fontStyle
-                }
-            }
-        }
-
-        fun sameRun(first: Int, second: Int): Boolean {
-            return colors[first] == colors[second] && fontStyles[first] == fontStyles[second]
-        }
     }
 
     private companion object {

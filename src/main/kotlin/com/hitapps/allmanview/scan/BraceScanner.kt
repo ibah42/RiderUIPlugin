@@ -21,6 +21,39 @@ enum class Flavor {
     GENERIC,
 }
 
+/** Кому принадлежит блок в фигурных скобках. */
+enum class BlockKind {
+    /** class, struct, interface, enum, record. */
+    TYPE,
+
+    /** Объявление метода, конструктора или локальной функции. */
+    FUNCTION,
+
+    /** Всё остальное: if, циклы, лямбды, инициализаторы, свойства. */
+    OTHER,
+}
+
+/**
+ * Скобка, которую надо выделить сильнее обычного.
+ *
+ * @param offset offset самой скобки в документе
+ * @param kind чей это блок
+ * @param nameOffset offset имени типа или метода — оттуда берём базовый цвет; -1 если не нашли
+ * @param nameLength длина этого имени
+ * @param keyword что писать в подписи: `class`, `struct`, `fun`
+ * @param isOpening открывающая это скобка или закрывающая
+ * @param spannedLines сколько строк занимает блок; у открывающей скобки всегда 0
+ */
+data class BraceAccent(
+    val offset: Int,
+    val kind: BlockKind,
+    val nameOffset: Int,
+    val nameLength: Int,
+    val keyword: String,
+    val isOpening: Boolean,
+    val spannedLines: Int,
+)
+
 /** Что именно разносить. */
 data class ScanOptions(
     /** Разносить `} else {` на три строки, а не только висящую `{`. */
@@ -31,6 +64,12 @@ data class ScanOptions(
 
     /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
     val expandInlineBlocks: Boolean = true,
+
+    /** Помечать скобки типов: class, struct, interface, enum, record. */
+    val accentTypes: Boolean = true,
+
+    /** Помечать скобки функций, методов, конструкторов и лямбд. */
+    val accentFunctions: Boolean = true,
 )
 
 /**
@@ -75,6 +114,12 @@ data class PhantomSite(
         get() = phantomLines.map { it.text }
 }
 
+/** Результат одного прохода по документу. */
+data class ScanResult(
+    val sites: List<PhantomSite>,
+    val accents: List<BraceAccent>,
+)
+
 /** Состояние лексера. */
 private enum class LexerState {
     CODE,
@@ -107,6 +152,15 @@ private class InterpolationFrame(
     val rawQuoteCount: Int,
     val cppRawDelimiter: String,
     val holeBraceDepth: Int,
+)
+
+/** Открытый блок в стеке вложенности. */
+private class OpenBlock(
+    val kind: BlockKind,
+    val nameOffset: Int,
+    val nameLength: Int,
+    val keyword: String,
+    val openLineNumber: Int,
 )
 
 /** Разобранный префикс строкового литерала: `$`, `@`, `R`. */
@@ -155,6 +209,11 @@ class BraceScanner(
     private val supportsBacktickTemplates = flavor == Flavor.WEB
 
     private val foundSites = ArrayList<PhantomSite>()
+    private val foundAccents = ArrayList<BraceAccent>()
+
+    /** Стек открытых `{`: по нему закрывающая скобка узнаёт, чей блок она закрывает. */
+    private val blockStack = ArrayDeque<OpenBlock>()
+
     private val textLength = text.length
 
     /** Курсор по документу. */
@@ -196,6 +255,15 @@ class BraceScanner(
     private var statementLineStartOffset = 0
     private var statementLineNumber = 0
 
+    /**
+     * Границы предыдущей строки с кодом.
+     *
+     * Нужны, когда `{` стоит на своей строке — то есть код уже в Allman. Заголовок
+     * блока тогда лежит на строке выше, и без этого класс и метод не распознать.
+     */
+    private var previousCodeStart = -1
+    private var previousCodeEnd = -1
+
     // --- состояние лексера ---
 
     private var lexerState = LexerState.CODE
@@ -214,7 +282,7 @@ class BraceScanner(
     /** Глубина `{}` внутри текущей дырки интерполяции. */
     private var holeBraceDepth = 0
 
-    fun scan(): List<PhantomSite> {
+    fun scan(): ScanResult {
         while (position < textLength) {
             val current = text[position]
             if (current == '\n') {
@@ -235,7 +303,7 @@ class BraceScanner(
             }
         }
         finishLine(textLength)
-        return foundSites
+        return ScanResult(foundSites, foundAccents)
     }
 
     // ---------------------------------------------------------------- состояния лексера
@@ -273,6 +341,7 @@ class BraceScanner(
                 markCode(position)
                 if (interpolationStack.isEmpty()) {
                     remember(lineBraceOpenOffsets, position)
+                    openBlock(position)
                 } else {
                     holeBraceDepth++
                 }
@@ -316,6 +385,7 @@ class BraceScanner(
         markCode(position)
         if (interpolationStack.isEmpty()) {
             remember(lineBraceCloseOffsets, position)
+            closeBlock(position)
         } else {
             holeBraceDepth--
         }
@@ -624,6 +694,11 @@ class BraceScanner(
 
     private fun finishLine(lineEndOffset: Int) {
         emitLine(lineEndOffset)
+
+        if (lineStartsInCode && firstCodeOffset >= 0 && lastCodeOffset >= 0) {
+            previousCodeStart = statementLineStartOffset
+            previousCodeEnd = lastCodeOffset + 1
+        }
 
         val isUnterminatedSingleLine = lexerState == LexerState.LINE_COMMENT ||
             lexerState == LexerState.STRING ||
@@ -944,6 +1019,399 @@ class BraceScanner(
         foundSites.add(PhantomSite(dimStart, dimEnd, anchorOffset, indent, phantomLines))
     }
 
+    // ------------------------------------------------- принадлежность фигурных скобок
+
+    private fun openBlock(braceOffset: Int) {
+        val block = classifyBlock(braceOffset)
+        blockStack.addLast(block)
+        rememberAccent(braceOffset, block, isOpening = true, spannedLines = 0)
+    }
+
+    private fun closeBlock(braceOffset: Int) {
+        if (blockStack.isEmpty()) {
+            // файл в процессе набора — скобки не сбалансированы
+            return
+        }
+        val block = blockStack.removeLast()
+        val spannedLines = lineNumber - block.openLineNumber
+        rememberAccent(braceOffset, block, isOpening = false, spannedLines = spannedLines)
+    }
+
+    private fun rememberAccent(
+        braceOffset: Int,
+        block: OpenBlock,
+        isOpening: Boolean,
+        spannedLines: Int,
+    ) {
+        if (!isAccented(block.kind)) {
+            return
+        }
+        foundAccents.add(
+            BraceAccent(
+                offset = braceOffset,
+                kind = block.kind,
+                nameOffset = block.nameOffset,
+                nameLength = block.nameLength,
+                keyword = block.keyword,
+                isOpening = isOpening,
+                spannedLines = spannedLines,
+            ),
+        )
+    }
+
+    private fun isAccented(kind: BlockKind): Boolean {
+        if (kind == BlockKind.TYPE) {
+            return options.accentTypes
+        }
+        if (kind == BlockKind.FUNCTION) {
+            return options.accentFunctions
+        }
+        return false
+    }
+
+    private fun classifyBlock(braceOffset: Int): OpenBlock {
+        if (!options.accentTypes && !options.accentFunctions) {
+            return otherBlock()
+        }
+
+        var headerStart = headerStartFor(braceOffset)
+        var headerEnd = braceOffset
+
+        if (firstCodeOffset == braceOffset) {
+            // скобка — первый код на строке, значит код уже в Allman и заголовок выше
+            if (previousCodeEnd <= 0 || previousCodeEnd > braceOffset) {
+                return otherBlock()
+            }
+            headerStart = previousCodeStart
+            headerEnd = previousCodeEnd
+        }
+
+        if (headerStart >= headerEnd) {
+            return otherBlock()
+        }
+
+        val header = declarationPart(text.subSequence(headerStart, headerEnd).toString())
+        val typeBlock = classifyTypeHeader(header, headerStart)
+        if (typeBlock != null) {
+            return typeBlock
+        }
+        return classifyFunctionHeader(header, headerStart)
+    }
+
+    private fun otherBlock(): OpenBlock {
+        return OpenBlock(BlockKind.OTHER, -1, 0, "", lineNumber)
+    }
+
+    private fun namedBlock(
+        kind: BlockKind,
+        keyword: String,
+        header: String,
+        headerStart: Int,
+        nameIndex: Int,
+    ): OpenBlock {
+        if (nameIndex < 0) {
+            return OpenBlock(kind, -1, 0, keyword, lineNumber)
+        }
+        val name = identifierAt(header, nameIndex)
+        return OpenBlock(kind, headerStart + nameIndex, name.length, keyword, lineNumber)
+    }
+
+    /**
+     * Заголовок без литералов и без констрейнтов.
+     *
+     * Констрейнты режем до классификации, иначе `void Bind<T>(T v) where T : class {`
+     * увидит слово `class` и сойдёт за объявление типа.
+     */
+    private fun declarationPart(header: String): String {
+        val withoutLiterals = header.substring(0, quoteLimit(header))
+        val whereIndex = findKeyword(withoutLiterals, WHERE_KEYWORDS)
+        if (whereIndex < 0) {
+            return withoutLiterals
+        }
+        return withoutLiterals.substring(0, whereIndex)
+    }
+
+    /**
+     * Где начинается заголовок этой скобки.
+     *
+     * Обычно это начало строки, с которой началась конструкция — так многострочная
+     * сигнатура разбирается целиком. Но если на строке уже были скобки, заголовок
+     * начинается после последней из них: иначе в `class A { void M() {` вторая скобка
+     * увидела бы слово `class` и сошла за тип.
+     */
+    private fun headerStartFor(braceOffset: Int): Int {
+        var start = statementLineStartOffset
+        for (offset in lineBraceOpenOffsets) {
+            if (offset < braceOffset && offset + 1 > start) {
+                start = offset + 1
+            }
+        }
+        for (offset in lineBraceCloseOffsets) {
+            if (offset < braceOffset && offset + 1 > start) {
+                start = offset + 1
+            }
+        }
+        return start
+    }
+
+    private fun classifyTypeHeader(header: String, headerStart: Int): OpenBlock? {
+        val keywordIndex = findKeyword(header, TYPE_KEYWORDS)
+        if (keywordIndex < 0) {
+            return null
+        }
+        val keyword = keywordAt(header, keywordIndex, TYPE_KEYWORDS) ?: return null
+
+        // `record struct Point` — ключевых слов может быть несколько подряд
+        var cursor = keywordIndex
+        while (true) {
+            val next = keywordAt(header, cursor, TYPE_KEYWORDS)
+            if (next == null) {
+                break
+            }
+            cursor = skipSpacesIn(header, cursor + next.length)
+        }
+
+        val nameIndex = identifierStartAt(header, cursor)
+        if (nameIndex >= 0) {
+            return namedBlock(BlockKind.TYPE, keyword, header, headerStart, nameIndex)
+        }
+
+        // Go: `type Point struct {` — имя стоит перед ключевым словом
+        val beforeIndex = identifierStartBefore(header, keywordIndex)
+        return namedBlock(BlockKind.TYPE, keyword, header, headerStart, beforeIndex)
+    }
+
+    private fun classifyFunctionHeader(header: String, headerStart: Int): OpenBlock {
+        val trimmed = header.trimEnd()
+
+        // лямбду проверяем первой: `return items.Select(x => {` — это тело лямбды,
+        // хотя строка и начинается со слова return
+        if (trimmed.endsWith("=>") || endsWithWord(trimmed, "delegate")) {
+            return lambdaBlock(header, headerStart)
+        }
+        if (!trimmed.endsWith(")")) {
+            return otherBlock()
+        }
+
+        val firstWordIndex = identifierStartAt(header, 0)
+        if (firstWordIndex < 0) {
+            return otherBlock()
+        }
+        val firstWord = identifierAt(header, firstWordIndex)
+        if (firstWord == "delegate") {
+            // анонимный метод со списком параметров: `delegate(int x) {`
+            return lambdaBlock(header, headerStart)
+        }
+        if (firstWord in NON_DECLARATION_KEYWORDS) {
+            return otherBlock()
+        }
+        if (containsAssignment(header)) {
+            // `var a = new Foo() {` — инициализатор, а не объявление
+            return otherBlock()
+        }
+
+        val parenIndex = header.indexOf('(')
+        if (parenIndex < 0) {
+            return otherBlock()
+        }
+
+        val nameEnd = skipGenericsBefore(header, parenIndex)
+        val nameIndex = identifierStartBefore(header, nameEnd)
+        if (nameIndex < 0) {
+            return otherBlock()
+        }
+        return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
+    }
+
+    /**
+     * Лямбда или анонимный метод.
+     *
+     * Собственного имени у них нет, поэтому берём ближайшее осмысленное:
+     * цель присваивания (`Action handler = () => {`) либо метод, которому лямбда
+     * передаётся (`Run(() => {`). Оттуда же возьмётся цвет.
+     */
+    private fun lambdaBlock(header: String, headerStart: Int): OpenBlock {
+        // Сначала вызов, которому лямбда передана: в `var r = items.Select(y => {`
+        // осмысленное имя — Select, а не переменная слева.
+        val openIndex = lastUnclosedParen(header)
+        if (openIndex >= 0) {
+            val nameEnd = skipGenericsBefore(header, openIndex)
+            val nameIndex = identifierStartBefore(header, nameEnd)
+            if (nameIndex >= 0) {
+                return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
+            }
+        }
+
+        // Скобок нет — значит лямбда просто присваивается: `Action handler = () => {`
+        val assignIndex = assignmentIndex(header)
+        if (assignIndex >= 0) {
+            val nameIndex = identifierStartBefore(header, assignIndex)
+            if (nameIndex >= 0) {
+                return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
+            }
+        }
+        return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, -1)
+    }
+
+    private fun lastUnclosedParen(header: String): Int {
+        val opened = ArrayList<Int>()
+        for (index in header.indices) {
+            if (header[index] == '(') {
+                opened.add(index)
+            }
+            if (header[index] == ')' && opened.isNotEmpty()) {
+                opened.removeAt(opened.size - 1)
+            }
+        }
+        if (opened.isEmpty()) {
+            return -1
+        }
+        return opened[opened.size - 1]
+    }
+
+    /** Всё после первой кавычки в заголовке разбирать нельзя — там литерал. */
+    private fun quoteLimit(header: String): Int {
+        val quoteIndex = header.indexOf('"')
+        if (quoteIndex < 0) {
+            return header.length
+        }
+        return quoteIndex
+    }
+
+    private fun findKeyword(header: String, keywords: Set<String>): Int {
+        val limit = quoteLimit(header)
+        for (index in 0 until limit) {
+            if (index > 0 && isIdentifierChar(header[index - 1])) {
+                continue
+            }
+            if (keywordAt(header, index, keywords) != null) {
+                return index
+            }
+        }
+        return -1
+    }
+
+    private fun keywordAt(header: String, index: Int, keywords: Set<String>): String? {
+        for (keyword in keywords) {
+            if (!header.startsWith(keyword, index)) {
+                continue
+            }
+            val following = header.getOrNull(index + keyword.length)
+            if (following != null && isIdentifierChar(following)) {
+                continue
+            }
+            return keyword
+        }
+        return null
+    }
+
+    private fun endsWithWord(header: String, word: String): Boolean {
+        if (!header.endsWith(word)) {
+            return false
+        }
+        val before = header.getOrNull(header.length - word.length - 1)
+        return before == null || !isIdentifierChar(before)
+    }
+
+    /** `Foo<T>(` — имя стоит до генерик-параметров, поэтому отматываем `<...>`. */
+    private fun skipGenericsBefore(header: String, parenIndex: Int): Int {
+        var cursor = parenIndex - 1
+        while (cursor >= 0 && header[cursor].isWhitespace()) {
+            cursor--
+        }
+        if (cursor < 0 || header[cursor] != '>') {
+            return cursor + 1
+        }
+
+        var depth = 0
+        while (cursor >= 0) {
+            if (header[cursor] == '>') {
+                depth++
+            }
+            if (header[cursor] == '<') {
+                depth--
+                if (depth == 0) {
+                    return cursor
+                }
+            }
+            cursor--
+        }
+        return parenIndex
+    }
+
+    /** Index присваивания `=`, но не `==`, `=>`, `<=`, `>=`, `!=`. */
+    private fun assignmentIndex(header: String): Int {
+        for (index in header.indices) {
+            if (header[index] != '=') {
+                continue
+            }
+            val previous = header.getOrNull(index - 1)
+            val next = header.getOrNull(index + 1)
+            val isComparison = previous == '=' || previous == '!' || previous == '<' ||
+                previous == '>' || next == '=' || next == '>'
+            if (!isComparison) {
+                return index
+            }
+        }
+        return -1
+    }
+
+    private fun containsAssignment(header: String): Boolean {
+        return assignmentIndex(header) >= 0
+    }
+
+    private fun skipSpacesIn(header: String, from: Int): Int {
+        var cursor = from
+        while (cursor < header.length && header[cursor].isWhitespace()) {
+            cursor++
+        }
+        return cursor
+    }
+
+    private fun identifierStartAt(header: String, from: Int): Int {
+        val cursor = skipSpacesIn(header, from)
+        if (cursor >= header.length) {
+            return -1
+        }
+        if (!isIdentifierStart(header[cursor])) {
+            return -1
+        }
+        return cursor
+    }
+
+    private fun identifierStartBefore(header: String, endExclusive: Int): Int {
+        var cursor = endExclusive - 1
+        while (cursor >= 0 && header[cursor].isWhitespace()) {
+            cursor--
+        }
+        if (cursor < 0 || !isIdentifierChar(header[cursor])) {
+            return -1
+        }
+        while (cursor > 0 && isIdentifierChar(header[cursor - 1])) {
+            cursor--
+        }
+        if (!isIdentifierStart(header[cursor])) {
+            return -1
+        }
+        return cursor
+    }
+
+    private fun identifierAt(header: String, start: Int): String {
+        var end = start
+        while (end < header.length && isIdentifierChar(header[end])) {
+            end++
+        }
+        return header.substring(start, end)
+    }
+
+    private fun isIdentifierChar(character: Char): Boolean {
+        return character.isLetterOrDigit() || character == '_'
+    }
+
+    private fun isIdentifierStart(character: Char): Boolean {
+        return character.isLetter() || character == '_'
+    }
+
     // ---------------------------------------------------------------- мелкие помощники
 
     private fun markCode(offset: Int) {
@@ -1036,6 +1504,23 @@ class BraceScanner(
 
     companion object {
         private val SPLIT_KEYWORDS = setOf("else", "catch", "finally")
+
+        /** Что пишем в подписи для функций: без типа возврата, просто `fun Name`. */
+        private const val FUNCTION_KEYWORD = "fun"
+
+        private val TYPE_KEYWORDS = setOf("class", "struct", "interface", "enum", "record")
+
+        private val WHERE_KEYWORDS = setOf("where")
+
+        /**
+         * С этих слов начинается что угодно, только не объявление функции.
+         * Без них `return new Foo() {` и `switch (x) {` попали бы в функции.
+         */
+        private val NON_DECLARATION_KEYWORDS = setOf(
+            "if", "for", "foreach", "while", "switch", "using", "lock", "fixed",
+            "catch", "do", "else", "try", "finally", "return", "throw", "yield",
+            "await", "new", "unsafe", "checked", "unchecked",
+        )
 
         /** Ключевые слова, с которых может начинаться разносимая конструкция. */
         private val HEADER_KEYWORDS = listOf(

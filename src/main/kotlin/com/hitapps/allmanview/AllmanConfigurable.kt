@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.Toggleable
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.bindIntValue
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
@@ -41,9 +42,101 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                     checkBox("Гасить исходный текст серым")
                         .bindSelected(config::dimOriginal)
                         .comment(
-                            "Реальный текст остаётся на месте — он просто приглушается, " +
-                                "как подсказки параметров.",
+                            "Реальный текст остаётся на месте — он просто приглушается.",
                         )
+                }
+                row {
+                    checkBox("Цветом подсказок IDE")
+                        .bindSelected(config::dimUseHintColor)
+                        .comment("Выключи, чтобы задать степень гашения вручную.")
+                }
+                row("Гасить к фону, %:") {
+                    spinner(0..100, 5).bindIntValue(config::dimPercent)
+                }
+            }
+
+            group("Скобки типов: class, struct, interface, enum, record") {
+                row {
+                    checkBox("Выделять")
+                        .bindSelected(config::accentTypes)
+                        .comment(
+                            "Цвет берётся с имени самого типа и уводится в сторону от фона.",
+                        )
+                }
+                row("К чёрному на светлой схеме, %:") {
+                    spinner(0..100, 5).bindIntValue(config::typeLightPercent)
+                }
+                row("К белому на тёмной схеме, %:") {
+                    spinner(0..100, 5).bindIntValue(config::typeDarkPercent)
+                }
+                row {
+                    checkBox("Жирным").bindSelected(config::typeBold)
+                    checkBox("С тенью").bindSelected(config::typeShadow)
+                }
+                row("Насыщенность тени, %:") {
+                    spinner(0..100, 5).bindIntValue(config::typeShadowPercent)
+                        .comment("0 — тени не видно, 100 — сплошной серый.")
+                }
+                row("Сдвиг тени, px:") {
+                    spinner(-4..4, 1).bindIntValue(config::typeShadowOffsetX)
+                    label("по X")
+                    spinner(-4..4, 1).bindIntValue(config::typeShadowOffsetY)
+                    label("по Y")
+                        .comment("X=1, Y=0 даёт псевдо-жирный вместо объёмной тени.")
+                }
+                row {
+                    checkBox("Подписывать конец блока")
+                        .bindSelected(config::typeLabel)
+                        .comment("}  class IosHttpClient")
+                }
+                row("Начиная с длины блока, строк:") {
+                    spinner(1..2000, 5).bindIntValue(config::typeLabelMinLines)
+                }
+                row("Подпись к серому, %:") {
+                    spinner(0..100, 5).bindIntValue(config::typeLabelGreyPercent)
+                }
+            }
+
+            group("Скобки функций, методов и лямбд") {
+                row {
+                    checkBox("Выделять")
+                        .bindSelected(config::accentFunctions)
+                        .comment(
+                            "У лямбды своего имени нет — цвет и подпись берутся у метода, " +
+                                "которому она передана, либо у цели присваивания.",
+                        )
+                }
+                row("К чёрному на светлой схеме, %:") {
+                    spinner(0..100, 5).bindIntValue(config::functionLightPercent)
+                }
+                row("К белому на тёмной схеме, %:") {
+                    spinner(0..100, 5).bindIntValue(config::functionDarkPercent)
+                }
+                row {
+                    checkBox("Жирным").bindSelected(config::functionBold)
+                    checkBox("С тенью").bindSelected(config::functionShadow)
+                }
+                row("Насыщенность тени, %:") {
+                    spinner(0..100, 5).bindIntValue(config::functionShadowPercent)
+                        .comment("0 — тени не видно, 100 — сплошной серый.")
+                }
+                row("Сдвиг тени, px:") {
+                    spinner(-4..4, 1).bindIntValue(config::functionShadowOffsetX)
+                    label("по X")
+                    spinner(-4..4, 1).bindIntValue(config::functionShadowOffsetY)
+                    label("по Y")
+                        .comment("X=1, Y=0 даёт псевдо-жирный вместо объёмной тени.")
+                }
+                row {
+                    checkBox("Подписывать конец блока")
+                        .bindSelected(config::functionLabel)
+                        .comment("}  fun HandleNativeResult")
+                }
+                row("Начиная с длины блока, строк:") {
+                    spinner(1..2000, 5).bindIntValue(config::functionLabelMinLines)
+                }
+                row("Подпись к серому, %:") {
+                    spinner(0..100, 5).bindIntValue(config::functionLabelGreyPercent)
                 }
             }
 

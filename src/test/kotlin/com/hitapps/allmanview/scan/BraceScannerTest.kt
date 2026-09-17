@@ -18,7 +18,31 @@ class BraceScannerTest {
             splitStatements = splitStatements,
             expandInlineBlocks = expandInlineBlocks,
         )
-        return BraceScanner(src, flavor, options).scan()
+        return BraceScanner(src, flavor, options).scan().sites
+    }
+
+    /** Скобки, помеченные как принадлежащие типу или функции. */
+    private fun accents(src: String, flavor: Flavor = Flavor.CSHARP): List<BraceAccent> {
+        return BraceScanner(src, flavor, ScanOptions()).scan().accents
+    }
+
+    /** Пары «символ скобки — чей блок», по порядку в документе. */
+    private fun accentKinds(src: String, flavor: Flavor = Flavor.CSHARP): List<Pair<Char, BlockKind>> {
+        return accents(src, flavor)
+            .sortedBy { it.offset }
+            .map { src[it.offset] to it.kind }
+    }
+
+    /** Имя, с которого будет взят цвет скобки. */
+    private fun accentName(src: String, accent: BraceAccent): String {
+        if (accent.nameOffset < 0) {
+            return ""
+        }
+        var end = accent.nameOffset
+        while (end < src.length && (src[end].isLetterOrDigit() || src[end] == '_')) {
+            end++
+        }
+        return src.substring(accent.nameOffset, end)
     }
 
     /** Текст, который будет погашен серым. */
@@ -437,6 +461,280 @@ class BraceScannerTest {
                 assertEquals(line.text, slice)
             }
         }
+    }
+
+
+    // --- принадлежность скобок типам и функциям ---
+
+    @Test
+    fun `скобки класса помечаются как тип`() {
+        val src = "public class Spawner {\n}"
+        assertEquals(listOf('{' to BlockKind.TYPE, '}' to BlockKind.TYPE), accentKinds(src))
+    }
+
+    @Test
+    fun `цвет берётся с имени класса`() {
+        val src = "public class Spawner {\n}"
+        for (accent in accents(src)) {
+            assertEquals("Spawner", accentName(src, accent))
+        }
+    }
+
+    @Test
+    fun `struct interface enum record тоже типы`() {
+        for (keyword in listOf("struct", "interface", "enum", "record")) {
+            val src = "public $keyword Thing {\n}"
+            assertEquals(2, accents(src).size)
+            assertEquals(BlockKind.TYPE, accents(src).first().kind)
+            assertEquals("Thing", accentName(src, accents(src).first()))
+        }
+    }
+
+    @Test
+    fun `record struct — имя берётся после обоих слов`() {
+        val src = "public record struct Point(int X) {\n}"
+        assertEquals("Point", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `метод помечается как функция`() {
+        val src = "private void Update() {\n}"
+        assertEquals(listOf('{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION), accentKinds(src))
+        assertEquals("Update", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `конструктор — тоже функция`() {
+        val src = "public Spawner(int count) {\n}"
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `генерик-метод — имя до угловых скобок`() {
+        val src = "public T Resolve<T>(string key) {\n}"
+        assertEquals("Resolve", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `where-констрейнты не мешают`() {
+        val src = "public void Bind<T>(T value) where T : class {\n}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Bind", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `многострочная сигнатура распознаётся`() {
+        val src = "private static void Handle(\n    int id,\n    bool flag) {\n}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Handle", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `вложенный класс и его методы`() {
+        val src = "class Outer {\n    class Inner {\n        void M() {\n        }\n    }\n}"
+        assertEquals(
+            listOf(
+                '{' to BlockKind.TYPE,
+                '{' to BlockKind.TYPE,
+                '{' to BlockKind.FUNCTION,
+                '}' to BlockKind.FUNCTION,
+                '}' to BlockKind.TYPE,
+                '}' to BlockKind.TYPE,
+            ),
+            accentKinds(src),
+        )
+    }
+
+    @Test
+    fun `две скобки на одной строке не путаются`() {
+        // у второй скобки заголовок начинается после первой, иначе `class` утёк бы в метод
+        val src = "class A { void M() {\n} }"
+        assertEquals(
+            listOf('{' to BlockKind.TYPE, '{' to BlockKind.FUNCTION),
+            accentKinds(src).take(2),
+        )
+    }
+
+    // --- что НЕ должно попадать в усиление ---
+
+    @Test
+    fun `управляющие конструкции не усиливаются`() {
+        for (src in listOf(
+            "if (x) {\n}",
+            "for (int i = 0; i < n; i++) {\n}",
+            "foreach (var a in b) {\n}",
+            "while (x) {\n}",
+            "switch (x) {\n}",
+            "try {\n}",
+            "lock (gate) {\n}",
+            "using (var s = Open()) {\n}",
+        )) {
+            assertTrue(src, accents(src).isEmpty())
+        }
+    }
+
+    @Test
+    fun `инициализаторы не усиливаются`() {
+        assertTrue(accents("var a = new Foo() {\n};").isEmpty())
+        assertTrue(accents("return new Foo() {\n};").isEmpty())
+        assertTrue(accents("var list = new List<int> {\n};").isEmpty())
+    }
+
+    // --- лямбды считаются функциями, имя берётся у ближайшего осмысленного ---
+
+    @Test
+    fun `лямбда берёт имя у метода, которому передана`() {
+        val src = "Run(() => {\n});"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Run", accentName(src, accents(src).first()))
+        assertEquals("fun", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `лямбда берёт имя у цели присваивания`() {
+        val src = "Action handler = () => {\n};"
+        assertEquals("handler", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `лямбда в цепочке берёт последний незакрытый вызов`() {
+        val src = "var r = items.Where(x => x > 0).Select(y => {\n});"
+        assertEquals("Select", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `лямбда после return всё равно функция`() {
+        val src = "return items.Select(x => {\n});"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Select", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `анонимный метод через delegate`() {
+        assertEquals(BlockKind.FUNCTION, accents("Run(delegate {\n});").first().kind)
+        assertEquals(BlockKind.FUNCTION, accents("Run(delegate(int x) {\n});").first().kind)
+    }
+
+    // --- подпись и протяжённость блока ---
+
+    @Test
+    fun `ключевое слово подписи`() {
+        assertEquals("class", accents("class A {\n}").first().keyword)
+        assertEquals("struct", accents("struct A {\n}").first().keyword)
+        assertEquals("interface", accents("interface A {\n}").first().keyword)
+        assertEquals("enum", accents("enum A {\n}").first().keyword)
+        assertEquals("fun", accents("void M() {\n}").first().keyword)
+    }
+
+    @Test
+    fun `длина имени позволяет его вырезать`() {
+        val src = "public class IosHttpClient {\n}"
+        val accent = accents(src).first()
+        assertEquals(
+            "IosHttpClient",
+            src.substring(accent.nameOffset, accent.nameOffset + accent.nameLength),
+        )
+    }
+
+    @Test
+    fun `протяжённость блока считается в строках`() {
+        val src = "class A {\n" + "    // line\n".repeat(9) + "}"
+        val closing = accents(src).first { !it.isOpening }
+        assertEquals(10, closing.spannedLines)
+        assertEquals(0, accents(src).first { it.isOpening }.spannedLines)
+    }
+
+    @Test
+    fun `типы и функции включаются по отдельности`() {
+        val src = "class A {\n    void M() {\n    }\n}"
+        val onlyTypes = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentFunctions = false)).scan()
+        assertTrue(onlyTypes.accents.all { it.kind == BlockKind.TYPE })
+
+        val onlyFunctions = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentTypes = false)).scan()
+        assertTrue(onlyFunctions.accents.all { it.kind == BlockKind.FUNCTION })
+    }
+
+    @Test
+    fun `свойства не усиливаются`() {
+        assertTrue(accents("public int Count { get; set; }").isEmpty())
+        assertTrue(accents("public int Count {\n    get {\n        return 1;\n    }\n}").isEmpty())
+    }
+
+    @Test
+    fun `namespace не усиливается`() {
+        assertTrue(accents("namespace Com.Hitapps.Core {\n}").isEmpty())
+    }
+
+    @Test
+    fun `слово class внутри литерала не делает блок типом`() {
+        assertTrue(accents("Log(\"class A\");\nif (x) {\n}").isEmpty())
+    }
+
+    @Test
+    fun `выключённое усиление не даёт меток`() {
+        val options = ScanOptions(accentTypes = false, accentFunctions = false)
+        val result = BraceScanner("class A {\n}", Flavor.CSHARP, options).scan()
+        assertTrue(result.accents.isEmpty())
+    }
+
+    @Test
+    fun `несбалансированные скобки не роняют стек`() {
+        val result = BraceScanner("}\n}\nclass A {\n", Flavor.CSHARP, ScanOptions()).scan()
+        assertEquals(1, result.accents.size)
+    }
+
+    // --- другие языки ---
+
+    @Test
+    fun `kotlin fun и class`() {
+        val src = "class Foo {\n    fun bar() {\n    }\n}"
+        assertEquals(
+            listOf('{' to BlockKind.TYPE, '{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION, '}' to BlockKind.TYPE),
+            accentKinds(src, Flavor.JVM),
+        )
+    }
+
+    @Test
+    fun `go struct — имя стоит перед ключевым словом`() {
+        val src = "type Point struct {\n}"
+        assertEquals(BlockKind.TYPE, accents(src, Flavor.WEB).first().kind)
+        assertEquals("Point", accentName(src, accents(src, Flavor.WEB).first()))
+    }
+
+
+    // --- код, уже написанный в Allman: заголовок на строке выше ---
+
+    @Test
+    fun `класс в Allman-стиле`() {
+        val src = "public class Spawner\n{\n}"
+        assertEquals(listOf('{' to BlockKind.TYPE, '}' to BlockKind.TYPE), accentKinds(src))
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `метод в Allman-стиле`() {
+        val src = "private void Update()\n{\n}"
+        assertEquals(listOf('{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION), accentKinds(src))
+        assertEquals("Update", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `многострочная сигнатура в Allman-стиле`() {
+        val src = "static void Handle(\n    int id,\n    bool flag)\n{\n}"
+        assertEquals("Handle", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `управляющие конструкции в Allman-стиле не усиливаются`() {
+        assertTrue(accents("if (x)\n{\n}").isEmpty())
+        assertTrue(accents("foreach (var a in b)\n{\n}").isEmpty())
+        assertTrue(accents("try\n{\n}").isEmpty())
+        assertTrue(accents("var a = new Foo()\n{\n};").isEmpty())
+    }
+
+    @Test
+    fun `свойство с телом в Allman-стиле не усиливается`() {
+        assertTrue(accents("public int Count\n{\n    get\n    {\n        return 1;\n    }\n}").isEmpty())
     }
 
     @Test
