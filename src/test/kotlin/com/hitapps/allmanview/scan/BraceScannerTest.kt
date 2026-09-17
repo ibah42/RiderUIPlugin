@@ -34,7 +34,11 @@ class BraceScannerTest {
             pos = s.dimEnd
             sb.append(src, pos, s.anchorOffset)
             pos = s.anchorOffset
-            for (line in s.phantomLines) sb.append('\n').append(s.indent).append(line)
+            for (line in s.phantomLines) {
+                sb.append('\n').append(s.indent)
+                repeat(line.extraIndentLevels) { sb.append("    ") }
+                sb.append(line.text)
+            }
         }
         sb.append(src, pos, src.length)
         return sb.toString()
@@ -45,7 +49,7 @@ class BraceScannerTest {
         val src = "if (x) {\n    Foo();\n}"
         val site = scan(src).single()
         assertEquals("{", dimmed(src, site))
-        assertEquals(listOf("{"), site.phantomLines)
+        assertEquals(listOf("{"), site.phantomTexts)
         assertEquals("if (x) «{»\n{\n    Foo();\n}", render(src))
     }
 
@@ -59,7 +63,7 @@ class BraceScannerTest {
     fun `отступ берётся у строки-владельца`() {
         val site = scan("\tclass A {\n\t}").single()
         assertEquals("\t", site.indent)
-        assertEquals(listOf("{"), site.phantomLines)
+        assertEquals(listOf("{"), site.phantomTexts)
     }
 
     @Test
@@ -74,7 +78,7 @@ class BraceScannerTest {
         val sites = scan(src)
         assertEquals(2, sites.size)
         assertEquals(" else if (y) {", dimmed(src, sites[1]))
-        assertEquals(listOf("else if (y)", "{"), sites[1].phantomLines)
+        assertEquals(listOf("else if (y)", "{"), sites[1].phantomTexts)
     }
 
     @Test
@@ -82,8 +86,8 @@ class BraceScannerTest {
         val src = "try {\n} catch (E e) {\n} finally {\n}"
         val sites = scan(src)
         assertEquals(3, sites.size)
-        assertEquals(listOf("catch (E e)", "{"), sites[1].phantomLines)
-        assertEquals(listOf("finally", "{"), sites[2].phantomLines)
+        assertEquals(listOf("catch (E e)", "{"), sites[1].phantomTexts)
+        assertEquals(listOf("finally", "{"), sites[2].phantomTexts)
     }
 
     @Test
@@ -92,7 +96,7 @@ class BraceScannerTest {
         val sites = scan(src)
         assertEquals(2, sites.size)
         assertEquals(" else", dimmed(src, sites[1]))
-        assertEquals(listOf("else"), sites[1].phantomLines)
+        assertEquals(listOf("else"), sites[1].phantomTexts)
     }
 
     @Test
@@ -101,7 +105,7 @@ class BraceScannerTest {
         val sites = scan(src, fullAllman = false)
         assertEquals(2, sites.size)
         assertEquals("{", dimmed(src, sites[1]))
-        assertEquals(listOf("{"), sites[1].phantomLines)
+        assertEquals(listOf("{"), sites[1].phantomTexts)
     }
 
     @Test
@@ -111,7 +115,7 @@ class BraceScannerTest {
 
     @Test
     fun `do-while не разносим`() {
-        assertTrue(scan("do {\n} while (x);").none { it.phantomLines.any { l -> l.startsWith("while") } })
+        assertTrue(scan("do {\n} while (x);").none { it.phantomTexts.any { l -> l.startsWith("while") } })
     }
 
     @Test
@@ -270,7 +274,7 @@ class BraceScannerTest {
         val src = "if (pending == null) return;"
         val site = scan(src).single()
         assertEquals("return;", dimmed(src, site))
-        assertEquals(listOf("    return;"), site.phantomLines)
+        assertEquals(listOf("return;"), site.phantomTexts)
     }
 
     @Test
@@ -290,7 +294,7 @@ class BraceScannerTest {
 
     @Test
     fun `lock с одиночной инструкцией`() {
-        assertEquals(listOf("    _count++;"), scan("lock (gate) _count++;").single().phantomLines)
+        assertEquals(listOf("_count++;"), scan("lock (gate) _count++;").single().phantomTexts)
     }
 
     @Test
@@ -302,8 +306,8 @@ class BraceScannerTest {
     @Test
     fun `using-выражение разносится`() {
         assertEquals(
-            listOf("    stream.Flush();"),
-            scan("using (var stream = Open()) stream.Flush();").single().phantomLines,
+            listOf("stream.Flush();"),
+            scan("using (var stream = Open()) stream.Flush();").single().phantomTexts,
         )
     }
 
@@ -336,20 +340,22 @@ class BraceScannerTest {
         val src = "if (x) {\n} else return;"
         val site = scan(src)[1]
         assertEquals(" else return;", dimmed(src, site))
-        assertEquals(listOf("else", "    return;"), site.phantomLines)
+        assertEquals(listOf("else", "return;"), site.phantomTexts)
     }
 
     @Test
     fun `else if с инструкцией`() {
         val src = "else if (x) return;"
-        assertEquals(listOf("    return;"), scan(src).single().phantomLines)
+        assertEquals(listOf("return;"), scan(src).single().phantomTexts)
     }
 
     @Test
-    fun `отступ фантома берётся из настроек`() {
-        val options = ScanOptions(indentUnit = "\t")
-        val sites = BraceScanner("if (x) return;", Flavor.CSHARP, options).scan()
-        assertEquals(listOf("\treturn;"), sites.single().phantomLines)
+    fun `отступ задаётся уровнями, а не пробелами`() {
+        // Сканер не знает ширину отступа: таб внутри строки drawString не разворачивает,
+        // поэтому в тексте фантома отступа нет вовсе — его рисует редактор.
+        val line = scan("if (x) return;").single().phantomLines.single()
+        assertEquals("return;", line.text)
+        assertEquals(1, line.extraIndentLevels)
     }
 
     @Test
@@ -364,25 +370,25 @@ class BraceScannerTest {
         val src = "if (x) { Foo(); }"
         val site = scan(src).single()
         assertEquals("{ Foo(); }", dimmed(src, site))
-        assertEquals(listOf("{", "    Foo();", "}"), site.phantomLines)
+        assertEquals(listOf("{", "Foo();", "}"), site.phantomTexts)
     }
 
     @Test
     fun `пустой однострочный блок`() {
-        assertEquals(listOf("{", "}"), scan("if (x) { }").single().phantomLines)
+        assertEquals(listOf("{", "}"), scan("if (x) { }").single().phantomTexts)
     }
 
     @Test
     fun `вложенный однострочный блок разворачивается целиком`() {
         val site = scan("if (x) { if (y) { a(); } }").single()
-        assertEquals(listOf("{", "    if (y) { a(); }", "}"), site.phantomLines)
+        assertEquals(listOf("{", "if (y) { a(); }", "}"), site.phantomTexts)
     }
 
     @Test
     fun `закрывающая скобка с else и блоком`() {
         val src = "try {\n} catch (E e) { Log(e); }"
         val site = scan(src)[1]
-        assertEquals(listOf("catch (E e)", "{", "    Log(e);", "}"), site.phantomLines)
+        assertEquals(listOf("catch (E e)", "{", "Log(e);", "}"), site.phantomTexts)
     }
 
     @Test
@@ -398,6 +404,39 @@ class BraceScannerTest {
     @Test
     fun `инициализатор в одну строку не трогаем`() {
         assertTrue(scan("var point = new Point { X = 1, Y = 2 };").isEmpty())
+    }
+
+
+    @Test
+    fun `инструкция уезжает на уровень глубже`() {
+        val lines = scan("if (x) return;").single().phantomLines
+        assertEquals(1, lines.single().extraIndentLevels)
+    }
+
+    @Test
+    fun `заголовок и скобки остаются на своём уровне`() {
+        val lines = scan("try {\n} catch (E e) { Log(e); }")[1].phantomLines
+        assertEquals(listOf(0, 0, 1, 0), lines.map { it.extraIndentLevels })
+    }
+
+    @Test
+    fun `текст фантома лежит в документе по своему offset`() {
+        val src = "    if (ready) Launch();"
+        for (line in scan(src).single().phantomLines) {
+            val slice = src.substring(line.sourceOffset, line.sourceOffset + line.text.length)
+            assertEquals(line.text, slice)
+        }
+    }
+
+    @Test
+    fun `offset совпадает с текстом и у скобок, и у заголовка`() {
+        val src = "if (x) {\n} else if (y) {\n}"
+        for (site in scan(src)) {
+            for (line in site.phantomLines) {
+                val slice = src.substring(line.sourceOffset, line.sourceOffset + line.text.length)
+                assertEquals(line.text, slice)
+            }
+        }
     }
 
     @Test

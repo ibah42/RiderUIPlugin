@@ -31,7 +31,7 @@ if (verbose) { Log(id); }                 if (verbose) { Log(id); }
                                           }
 ```
 
-Серым — реальный текст, чёрным — фантом. Разносятся `if`, `else`, `for`, `foreach`, `while`,
+Серым — реальный текст; фантом рисуется с настоящей подсветкой, той же, что у оригинала. Разносятся `if`, `else`, `for`, `foreach`, `while`,
 `using`, `lock`, `fixed`. Всё это отключается по отдельности в настройках.
 
 Намеренно **не** трогаются конструкции, где одна строка уместна: `using System.Text;`
@@ -47,8 +47,17 @@ if (verbose) { Log(id); }                 if (verbose) { Log(id); }
    `TextAttributes` только с `foregroundColor`. Красит реальную `{` (и `else`/`catch`/`finally`
    при полном Allman) в приглушённый цвет подсказок параметров.
 2. **Block inlay** — `InlayModel.addBlockElement(lineEnd, relatesToPrecedingText = true, showAbove = false, ...)`.
-   Рисует фантомную строку обычным цветом, под строкой-владельцем, на её отступе.
+   Рисует фантомную строку под строкой-владельцем, на её отступе.
    Каретка по инлею не ходит и перескакивает на реальный текст — как у подсказок параметров.
+
+Текст фантома — всегда непрерывный кусок документа, и `PhantomLine` хранит его `sourceOffset`.
+Поэтому подсветку можно спросить у самого редактора: символ фантома с индексом `i` лежит в
+документе на `sourceOffset + i`. Цвета собираются из двух источников — лексера
+(`EditorEx.getHighlighter()`) и разметки документа (`DocumentMarkupModel`), потому что в Rider
+подсветка C# приходит из бэкенда ReSharper именно разметкой, и одного лексера мало.
+
+Отступ фантома задаётся **уровнями**, а не пробелами: ширину уровня знает только редактор,
+а таб внутри строки `Graphics.drawString` не разворачивает — отступ бы просто пропал.
 
 Фолдинг не используется сознательно: он конфликтовал с fold-регионами ReSharper на телах
 методов (`createFoldRegion` возвращал `null`, и перенос молча не срабатывал) и выталкивал
@@ -56,9 +65,6 @@ if (verbose) { Log(id); }                 if (verbose) { Log(id); }
 
 Документ не трогается вообще. Копирование, поиск, компилятор, git и ReSharper видят
 реальный K&R-текст — диффы остаются чистыми.
-
-Отступ фантома считается в колонках через `EditorUtil.getSpaceWidth`, а не измерением
-строки шрифтом, — поэтому табы и пробелы дают одинаково правильное выравнивание.
 
 У многострочной конструкции отступ берётся не у строки со скобкой, а у строки, с которой
 конструкция началась (сканер считает глубину `(` и `[`):
@@ -77,12 +83,15 @@ private static void HandleNativeResult(
 
 | Диалект | Расширения | Что учитывает |
 |---|---|---|
-| `CSHARP` | `cs` | `@"verbatim"`, `"""raw"""`, `$"{interp}"` с вложенными кавычками |
+| `CSHARP` | `cs csx` | `@"verbatim"`, `"""raw"""`, `$"{interp}"` с вложенными кавычками |
 | `CPP` | `c cpp h hpp m mm metal hlsl glsl shader compute cginc usf` | `R"delim(raw)delim"`, `1'000'000` |
-| `GENERIC` | всё остальное | `"..."`, `'...'`, `` `...` ``, `"""..."""`, `/* */`, `//` |
+| `JVM` | `java kt kts scala groovy gradle swift dart` | текстовые блоки `"""` |
+| `WEB` | `js jsx ts tsx go php` | `` `шаблоны ${...}` `` |
+| `GENERIC` | всё остальное (`rs json css scss sql proto zig`…) | `"..."`, `'...'`, `/* */`, `//` |
 
-`GENERIC` проверен на Swift (`\(interp)`, `"""`), Kotlin (обратные кавычки в именах,
-`${...}`), Java (text blocks), Go (raw strings в обратных кавычках), TS (template literals).
+Диалект `JVM` существует не для красоты: у Java, Kotlin, Scala и Swift есть `"""`-блоки,
+и без их разбора сканер уезжает внутрь многострочной строки. Тест это ловит явно — один и тот
+же Java-файл с text block даёт 1 срабатывание с `JVM` и 2 с `GENERIC`.
 
 Список расширений редактируется в Settings → Editor → Allman View. Там же галочка
 «Во всех текстовых файлах» — тогда список игнорируется и плагин работает везде.
@@ -92,7 +101,7 @@ private static void HandleNativeResult(
 | Файл | Что делает |
 |---|---|
 | `scan/BraceScanner.kt` | Лексер + поиск мест переноса. **Ноль зависимостей от IntelliJ**, покрыт тестами. |
-| `AllmanController.kt` | Один на редактор: пересобирает фолды и инлеи по таймеру. |
+| `AllmanController.kt` | Один на редактор: пересобирает подсветку и инлеи по таймеру. |
 | `AllmanService.kt` | Подписка на создание редакторов, `refreshAll()`. |
 | `PhantomLineRenderer.kt` | Отрисовка фантомных строк. |
 | `AllmanSettings.kt` / `AllmanConfigurable.kt` | Настройки + панель в Settings → Editor → Allman View. |
@@ -104,7 +113,7 @@ private static void HandleNativeResult(
 ```
 gradlew.bat test        # тесты сканера
 gradlew.bat runIde      # поднимает песочную IDE с плагином
-gradlew.bat buildPlugin # build/distributions/allman-view-0.1.0.zip
+gradlew.bat buildPlugin # build/distributions/allman-view-0.6.0.zip
 ```
 
 Версии зафиксированы так, потому что:

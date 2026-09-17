@@ -110,18 +110,7 @@ class AllmanController(private val editor: Editor) : Disposable {
             fullAllman = settings.state.fullAllman,
             splitStatements = settings.state.splitStatements,
             expandInlineBlocks = settings.state.expandInlineBlocks,
-            indentUnit = indentUnit(),
         )
-    }
-
-    /** Один уровень отступа — как настроен в самой IDE для этого файла. */
-    private fun indentUnit(): String {
-        val project = editor.project
-        if (editor.settings.isUseTabCharacter(project)) {
-            return "\t"
-        }
-        val tabSize = editor.settings.getTabSize(project).coerceAtLeast(1)
-        return " ".repeat(tabSize)
     }
 
     private fun dimOriginalText(site: PhantomSite, attributes: TextAttributes) {

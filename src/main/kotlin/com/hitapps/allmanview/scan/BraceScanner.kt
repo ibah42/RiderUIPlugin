@@ -31,9 +31,24 @@ data class ScanOptions(
 
     /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
     val expandInlineBlocks: Boolean = true,
+)
 
-    /** Один уровень отступа: четыре пробела, два пробела или таб. */
-    val indentUnit: String = "    ",
+/**
+ * Одна фантомная строка.
+ *
+ * Текст — всегда непрерывный кусок документа, поэтому рендерер может забрать для него
+ * настоящую подсветку: символ с индексом `i` лежит в документе на `sourceOffset + i`.
+ *
+ * @param text что нарисовать
+ * @param sourceOffset offset этого текста в документе
+ * @param extraIndentLevels на сколько уровней глубже отступа строки-владельца.
+ *   Именно уровней, а не пробелов: ширину уровня знает только редактор, а таб
+ *   внутри строки `Graphics.drawString` не разворачивает и отступ бы пропал.
+ */
+data class PhantomLine(
+    val text: String,
+    val sourceOffset: Int,
+    val extraIndentLevels: Int = 0,
 )
 
 /**
@@ -46,16 +61,19 @@ data class ScanOptions(
  * @param dimEnd offset конца гасимого куска (exclusive)
  * @param anchorOffset offset конца строки-владельца — якорь для block inlay
  * @param indent ведущий whitespace строки-владельца, как есть (табы/пробелы)
- * @param phantomLines что рисуем фантомными строками, сверху вниз; собственный отступ
- *   вложенных строк уже включён в текст
+ * @param phantomLines что рисуем фантомными строками, сверху вниз
  */
 data class PhantomSite(
     val dimStart: Int,
     val dimEnd: Int,
     val anchorOffset: Int,
     val indent: String,
-    val phantomLines: List<String>,
-)
+    val phantomLines: List<PhantomLine>,
+) {
+    /** Только тексты фантомов — удобно в тестах и логах. */
+    val phantomTexts: List<String>
+        get() = phantomLines.map { it.text }
+}
 
 /** Состояние лексера. */
 private enum class LexerState {
@@ -660,27 +678,28 @@ class BraceScanner(
             return
         }
 
-        val head = text.subSequence(firstCodeOffset, braceOffset)
-            .toString()
-            .trimEnd()
-
-        if (head.isEmpty()) {
-            return
-        }
-
-        if (options.fullAllman && head.startsWith("}")) {
-            val tail = head.substring(1).trimStart()
-            if (isSplitKeyword(tail)) {
+        val header = parseLineHeader()
+        if (header != null && movesLeadingCloseBrace(header)) {
+            val headerText = text.subSequence(header.headerStart, braceOffset).toString().trimEnd()
+            if (headerText.isNotEmpty()) {
                 // гасим всё, что уехало вниз: " else {"
                 addSite(
                     dimStart = firstCodeOffset + 1,
                     dimEnd = braceOffset + 1,
                     anchorOffset = lineEndOffset,
                     indent = indent,
-                    phantomLines = listOf(tail, "{"),
+                    phantomLines = listOf(
+                        PhantomLine(headerText, header.headerStart),
+                        PhantomLine("{", braceOffset),
+                    ),
                 )
                 return
             }
+        }
+
+        val head = text.subSequence(firstCodeOffset, braceOffset).toString().trimEnd()
+        if (head.isEmpty()) {
+            return
         }
 
         // гасим только саму скобку — пробелы перед ней и так не видно
@@ -689,7 +708,7 @@ class BraceScanner(
             dimEnd = braceOffset + 1,
             anchorOffset = lineEndOffset,
             indent = indent,
-            phantomLines = listOf("{"),
+            phantomLines = listOf(PhantomLine("{", braceOffset)),
         )
     }
 
@@ -704,6 +723,7 @@ class BraceScanner(
         if (header == null) {
             return
         }
+
         val openCount = countOffsetsAtOrAfter(lineBraceOpenOffsets, header.headerEnd)
         val closeCount = countOffsetsAtOrAfter(lineBraceCloseOffsets, header.headerEnd)
         if (openCount == 0 || openCount != closeCount) {
@@ -718,18 +738,23 @@ class BraceScanner(
             return
         }
 
-        val inner = text.subSequence(openOffset + 1, lastCodeOffset).toString().trim()
-        val blockLines = ArrayList<String>()
-        blockLines.add("{")
-        if (inner.isNotEmpty()) {
-            blockLines.add(options.indentUnit + inner)
+        val innerStart = skipSpacesFrom(openOffset + 1)
+        val innerText = text.subSequence(innerStart, lastCodeOffset).toString().trimEnd()
+
+        val blockLines = ArrayList<PhantomLine>()
+        blockLines.add(PhantomLine("{", openOffset))
+        if (innerText.isNotEmpty()) {
+            blockLines.add(PhantomLine(innerText, innerStart, extraIndentLevels = 1))
         }
-        blockLines.add("}")
+        blockLines.add(PhantomLine("}", lastCodeOffset))
 
         if (movesLeadingCloseBrace(header)) {
-            val headerText = text.subSequence(header.headerStart, header.headerEnd).toString().trim()
-            val phantomLines = ArrayList<String>()
-            phantomLines.add(headerText)
+            val headerText = text.subSequence(header.headerStart, openOffset).toString().trimEnd()
+            if (headerText.isEmpty()) {
+                return
+            }
+            val phantomLines = ArrayList<PhantomLine>()
+            phantomLines.add(PhantomLine(headerText, header.headerStart))
             phantomLines.addAll(blockLines)
 
             addSite(
@@ -762,24 +787,32 @@ class BraceScanner(
         }
 
         val statementStart = skipSpacesFrom(header.headerEnd)
-        val statement = text.subSequence(header.headerEnd, lastCodeOffset + 1).toString().trim()
-        val headerText = text.subSequence(header.headerStart, header.headerEnd).toString().trim()
+        val statementText = text.subSequence(statementStart, lastCodeOffset + 1).toString().trimEnd()
 
         // пустая инструкция `while (x);` и голое `{` — не наш случай
-        val hasStatement = statement.isNotEmpty() &&
-            statement != ";" &&
-            !statement.startsWith("{") &&
-            options.splitStatements
+        val hasStatement = options.splitStatements &&
+            statementText.isNotEmpty() &&
+            statementText != ";" &&
+            !statementText.startsWith("{")
 
         if (movesLeadingCloseBrace(header)) {
+            val headerEnd: Int
+            if (hasStatement) {
+                headerEnd = statementStart
+            } else {
+                headerEnd = lastCodeOffset + 1
+            }
+            val headerText = text.subSequence(header.headerStart, headerEnd).toString().trimEnd()
             if (headerText.isEmpty()) {
                 return
             }
-            val phantomLines = ArrayList<String>()
-            phantomLines.add(headerText)
+
+            val phantomLines = ArrayList<PhantomLine>()
+            phantomLines.add(PhantomLine(headerText, header.headerStart))
             if (hasStatement) {
-                phantomLines.add(options.indentUnit + statement)
+                phantomLines.add(PhantomLine(statementText, statementStart, extraIndentLevels = 1))
             }
+
             addSite(
                 dimStart = firstCodeOffset + 1,
                 dimEnd = lastCodeOffset + 1,
@@ -798,7 +831,9 @@ class BraceScanner(
             dimEnd = lastCodeOffset + 1,
             anchorOffset = lineEndOffset,
             indent = indent,
-            phantomLines = listOf(options.indentUnit + statement),
+            phantomLines = listOf(
+                PhantomLine(statementText, statementStart, extraIndentLevels = 1),
+            ),
         )
     }
 
@@ -898,7 +933,7 @@ class BraceScanner(
         dimEnd: Int,
         anchorOffset: Int,
         indent: String,
-        phantomLines: List<String>,
+        phantomLines: List<PhantomLine>,
     ) {
         if (dimStart >= dimEnd) {
             return
@@ -907,22 +942,6 @@ class BraceScanner(
             return
         }
         foundSites.add(PhantomSite(dimStart, dimEnd, anchorOffset, indent, phantomLines))
-    }
-
-    private fun isSplitKeyword(tail: String): Boolean {
-        for (keyword in SPLIT_KEYWORDS) {
-            if (!tail.startsWith(keyword)) {
-                continue
-            }
-            val following = tail.getOrNull(keyword.length)
-            if (following == null) {
-                return true
-            }
-            if (!following.isLetterOrDigit() && following != '_') {
-                return true
-            }
-        }
-        return false
     }
 
     // ---------------------------------------------------------------- мелкие помощники
