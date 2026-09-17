@@ -661,8 +661,10 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `namespace is not accented`() {
-        assertTrue(accents("namespace Com.Hitapps.Core {\n}").isEmpty())
+    fun `namespace is its own kind, neither TYPE nor FUNCTION`() {
+        val namespaceAccents = accents("namespace Com.Hitapps.Core {\n}")
+        assertTrue(namespaceAccents.isNotEmpty())
+        assertTrue(namespaceAccents.all { it.kind == BlockKind.NAMESPACE })
     }
 
     @Test
@@ -741,5 +743,222 @@ class BraceScannerTest {
     fun `anchor points at the end of the line`() {
         val src = "if (x) { // c\n}"
         assertEquals(src.indexOf('\n'), scan(src).single().anchorOffset)
+    }
+
+    // ------------------------------------------------------- nesting, for the fences
+
+    private fun closing(src: String): List<BraceAccent> {
+        return accents(src).filter { !it.isOpening }
+    }
+
+    @Test
+    fun `a top level type is not nested`() {
+        val src = "class Outer\n{\n}"
+        assertEquals(false, closing(src).single().isNested)
+    }
+
+    @Test
+    fun `a type inside a type is nested`() {
+        val src = "class Outer\n{\n    class Inner\n    {\n    }\n}"
+        val nested = closing(src).filter { it.isNested }
+        assertEquals(1, nested.size)
+        assertEquals("Inner", accentName(src, nested.single()))
+    }
+
+    @Test
+    fun `nesting counts at any depth`() {
+        val src = "class A\n{\n    class B\n    {\n        class C\n        {\n        }\n    }\n}"
+        assertEquals(2, closing(src).count { it.isNested })
+    }
+
+    @Test
+    fun `a method inside a class is not a nested function`() {
+        val src = "class A\n{\n    void M()\n    {\n    }\n}"
+        val method = closing(src).single { it.kind == BlockKind.FUNCTION }
+        assertEquals(false, method.isNested)
+    }
+
+    @Test
+    fun `a local function inside a method is a nested function`() {
+        val src = "class A\n{\n    void M()\n    {\n        void Local()\n        {\n        }\n    }\n}"
+        val nested = closing(src).filter { it.isNested }
+        assertEquals(1, nested.size)
+        assertEquals(BlockKind.FUNCTION, nested.single().kind)
+        assertEquals("Local", accentName(src, nested.single()))
+    }
+
+    @Test
+    fun `a lambda is marked as a lambda and a declared function is not`() {
+        val lambda = "void M()\n{\n    Run(() =>\n    {\n    });\n}"
+        assertEquals(true, closing(lambda).single { it.isNested }.isLambda)
+
+        val declared = "void M()\n{\n    void Local()\n    {\n    }\n}"
+        assertEquals(false, closing(declared).single { it.isNested }.isLambda)
+    }
+
+    /** The fence goes above the line the signature starts on, not above the brace line. */
+    @Test
+    fun `header offset points at the declaration line, not at the brace line`() {
+        val src = "class A\n{\n    void Handle(\n        int id)\n    {\n    }\n}"
+        val method = accents(src).single { it.isOpening && it.kind == BlockKind.FUNCTION }
+
+        val lineStart = src.lastIndexOf('\n', method.headerOffset - 1) + 1
+        assertEquals(lineStart, method.headerOffset)
+        assertTrue(
+            "header offset must land on the signature line",
+            src.startsWith("    void Handle(", method.headerOffset),
+        )
+    }
+
+    @Test
+    fun `a block left unclosed reports nothing about nesting`() {
+        val src = "class A\n{\n    class B\n    {\n"
+        assertTrue(closing(src).isEmpty())
+    }
+
+    // ----------------------------------------- bracket depth is scoped to its own block
+
+    /**
+     * A lambda passed to a still-unclosed outer call must not read that call's own header,
+     * comments included, for every construct inside its body -- see BraceScanner.openBlock.
+     */
+    @Test
+    fun `an if inside a lambda passed to an unclosed call is not accented`() {
+        val src = "" +
+            "Register(\n" +
+            "    x,\n" +
+            "    () =>\n" +
+            "    {\n" +
+            "        // a comment mentioning class and that word right before it\n" +
+            "        if (ok)\n" +
+            "        {\n" +
+            "            return;\n" +
+            "        }\n" +
+            "    }\n" +
+            ");"
+        val inner = accents(src).filter { it.kind != BlockKind.FUNCTION || it.keyword != "fun" || !it.isLambda }
+        assertTrue(inner.isEmpty())
+    }
+
+    /**
+     * A block never remembers an accent for its own sake -- OTHER kind never gets one. This
+     * only proves the multi-line `if` was not misread as a TYPE or FUNCTION: the sole accent
+     * pair left is the enclosing lambda's own.
+     */
+    @Test
+    fun `a multi-line if inside such a lambda still classifies as other`() {
+        val src = "" +
+            "Register(\n" +
+            "    x,\n" +
+            "    () =>\n" +
+            "    {\n" +
+            "        if (a\n" +
+            "            && b)\n" +
+            "        {\n" +
+            "            return;\n" +
+            "        }\n" +
+            "    }\n" +
+            ");"
+        assertEquals(2, accents(src).size)
+        assertTrue(accents(src).all { it.isLambda })
+    }
+
+    @Test
+    fun `a nested function inside such a lambda is still found and named`() {
+        val src = "" +
+            "Register(\n" +
+            "    x,\n" +
+            "    () =>\n" +
+            "    {\n" +
+            "        void Local()\n" +
+            "        {\n" +
+            "        }\n" +
+            "    }\n" +
+            ");"
+        val local = accents(src).single { it.isOpening && !it.isLambda }
+        assertEquals("Local", accentName(src, local))
+    }
+
+    // ----------------------------------------- namespace is a block kind of its own
+
+    @Test
+    fun `a namespace produces one opening and one closing accent`() {
+        val src = "" +
+            "namespace Foo.Bar\n" +
+            "{\n" +
+            "    class A\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val namespaceAccents = accents(src).filter { it.kind == BlockKind.NAMESPACE }
+        assertEquals(2, namespaceAccents.size)
+        assertTrue(namespaceAccents.any { it.isOpening })
+        assertTrue(namespaceAccents.any { !it.isOpening })
+    }
+
+    @Test
+    fun `a namespace label is the bare ns, with no name recorded`() {
+        val src = "namespace Foo\n{\n}\n"
+        val closing = accents(src).single { it.kind == BlockKind.NAMESPACE && !it.isOpening }
+        assertEquals("ns", closing.keyword)
+        assertEquals(0, closing.nameLength)
+        assertEquals("", accentName(src, closing))
+    }
+
+    @Test
+    fun `accentNamespaces=false finds no namespace accents at all`() {
+        val src = "namespace Foo\n{\n}\n"
+        val options = ScanOptions(accentNamespaces = false)
+        val result = BraceScanner(src, Flavor.CSHARP, options).scan()
+        assertTrue(result.accents.none { it.kind == BlockKind.NAMESPACE })
+    }
+
+    @Test
+    fun `namespace detection does not depend on accentTypes or accentFunctions`() {
+        val src = "namespace Foo\n{\n}\n"
+        val options = ScanOptions(accentTypes = false, accentFunctions = false, accentNamespaces = true)
+        val result = BraceScanner(src, Flavor.CSHARP, options).scan()
+        assertEquals(2, result.accents.count { it.kind == BlockKind.NAMESPACE })
+    }
+
+    @Test
+    fun `a type directly inside a namespace is not nested -- the kinds differ`() {
+        val src = "" +
+            "namespace Foo\n" +
+            "{\n" +
+            "    class A\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val classClosing = accents(src).single { it.kind == BlockKind.TYPE && !it.isOpening }
+        assertTrue(!classClosing.isNested)
+    }
+
+    @Test
+    fun `a namespace inside a namespace is nested, like any other kind`() {
+        val src = "" +
+            "namespace Outer\n" +
+            "{\n" +
+            "    namespace Inner\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val closings = accents(src).filter { it.kind == BlockKind.NAMESPACE && !it.isOpening }
+        assertEquals(2, closings.size)
+        assertEquals(1, closings.count { it.isNested })
+    }
+
+    @Test
+    fun `a namespace keeps the offset of its declaration line, not of its brace`() {
+        val src = "namespace Foo\n{\n}\n"
+        val opening = accents(src).single { it.kind == BlockKind.NAMESPACE && it.isOpening }
+        assertTrue(src.startsWith("namespace Foo", opening.headerOffset))
+    }
+
+    @Test
+    fun `a file-scoped namespace declaration has no braces, so no namespace accent`() {
+        val src = "namespace Foo.Bar;\n\nclass A\n{\n}\n"
+        assertTrue(accents(src).none { it.kind == BlockKind.NAMESPACE })
+        assertTrue(accents(src).any { it.kind == BlockKind.TYPE })
     }
 }

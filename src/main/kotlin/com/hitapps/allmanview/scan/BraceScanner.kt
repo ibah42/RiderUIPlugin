@@ -29,6 +29,13 @@ enum class BlockKind {
     /** A method, constructor or local function declaration. */
     FUNCTION,
 
+    /**
+     * A `namespace` block. A kind of its own rather than a flag on [OTHER]: it then flows
+     * through the same accent pipeline as the two above -- colour, weight, shadow, label --
+     * and a namespace inside a namespace counts as nested, exactly like a type inside a type.
+     */
+    NAMESPACE,
+
     /** Everything else: if, loops, lambdas, initializers, properties. */
     OTHER,
 }
@@ -43,6 +50,11 @@ enum class BlockKind {
  * @param keyword what to print in the label: `class`, `struct`, `fun`
  * @param isOpening whether this is the opening or the closing brace
  * @param spannedLines how many lines the block covers; always 0 for the opening brace
+ * @param isNested another block of the same kind encloses this one: a type inside a type, or a
+ *   local function inside a function. Any depth counts, so only the outermost one is not nested.
+ * @param isLambda the block is a lambda or an anonymous delegate rather than a declared function
+ * @param headerOffset offset where the declaration itself starts, which for a multi-line
+ *   signature is well before the brace; -1 when the block has no header
  */
 data class BraceAccent(
     val offset: Int,
@@ -52,6 +64,9 @@ data class BraceAccent(
     val keyword: String,
     val isOpening: Boolean,
     val spannedLines: Int,
+    val isNested: Boolean = false,
+    val isLambda: Boolean = false,
+    val headerOffset: Int = -1,
 )
 
 /** What exactly to split. */
@@ -70,6 +85,9 @@ data class ScanOptions(
 
     /** Mark braces of functions, methods, constructors and lambdas. */
     val accentFunctions: Boolean = true,
+
+    /** Mark namespace braces. */
+    val accentNamespaces: Boolean = true,
 )
 
 /**
@@ -161,7 +179,14 @@ private class OpenBlock(
     val nameLength: Int,
     val keyword: String,
     val openLineNumber: Int,
-)
+    val isLambda: Boolean = false,
+
+    /** Where the declaration starts, which for a multi-line signature is not the brace line. */
+    val headerOffset: Int = -1,
+) {
+    /** Filled in when the block is pushed, so the closing brace reports the same value. */
+    var isNested: Boolean = false
+}
 
 /** A parsed string literal prefix: `$`, `@`, `R`. */
 private class LiteralPrefix(
@@ -253,6 +278,16 @@ class BraceScanner(
     private var bracketDepthAtLineStart = 0
     private var statementLineStartOffset = 0
     private var statementLineNumber = 0
+
+    /**
+     * `bracketDepth` saved across a `{ }` block, so a paren left open by an OUTER statement
+     * (a lambda passed to a still-unclosed call, `Register(\n    x,\n    () =>\n    {`) does not
+     * leak into the block's body. Without this, every line inside such a lambda looks like a
+     * continuation of that outer call — `bracketDepth` never returns to 0, so
+     * [statementLineStartOffset] freezes at the call's first line for the whole body, and every
+     * Allman brace in it reads the call's own header (comments and all) instead of its own.
+     */
+    private val bracketDepthStack = ArrayDeque<Int>()
 
     /**
      * Bounds of the previous line that held code.
@@ -1021,9 +1056,16 @@ class BraceScanner(
     // ------------------------------------------------------- curly brace ownership
 
     private fun openBlock(braceOffset: Int) {
+        // Classify first, while bracketDepth still belongs to the line this brace sits on --
+        // that is the outer statement's own continuation and must stay visible to it. Only
+        // once that is done does the block's body get its own fresh bracket scope.
         val block = classifyBlock(braceOffset)
+        block.isNested = enclosesKind(block.kind)
         blockStack.addLast(block)
         rememberAccent(braceOffset, block, isOpening = true, spannedLines = 0)
+
+        bracketDepthStack.addLast(bracketDepth)
+        bracketDepth = 0
     }
 
     private fun closeBlock(braceOffset: Int) {
@@ -1034,6 +1076,9 @@ class BraceScanner(
         val block = blockStack.removeLast()
         val spannedLines = lineNumber - block.openLineNumber
         rememberAccent(braceOffset, block, isOpening = false, spannedLines = spannedLines)
+
+        // Back to the outer statement's own bracket nesting, exactly as it was left.
+        bracketDepth = bracketDepthStack.removeLast()
     }
 
     private fun rememberAccent(
@@ -1054,8 +1099,29 @@ class BraceScanner(
                 keyword = block.keyword,
                 isOpening = isOpening,
                 spannedLines = spannedLines,
+                isNested = block.isNested,
+                isLambda = block.isLambda,
+                headerOffset = block.headerOffset,
             ),
         )
+    }
+
+    /**
+     * Whether a block of the same kind is already open around this one.
+     *
+     * Kind-specific on purpose: a method inside a class is not a nested function, but a local
+     * function inside that method is. Depth does not matter — one enclosing block is enough.
+     */
+    private fun enclosesKind(kind: BlockKind): Boolean {
+        if (kind == BlockKind.OTHER) {
+            return false
+        }
+        for (block in blockStack) {
+            if (block.kind == kind) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun isAccented(kind: BlockKind): Boolean {
@@ -1065,11 +1131,14 @@ class BraceScanner(
         if (kind == BlockKind.FUNCTION) {
             return options.accentFunctions
         }
+        if (kind == BlockKind.NAMESPACE) {
+            return options.accentNamespaces
+        }
         return false
     }
 
     private fun classifyBlock(braceOffset: Int): OpenBlock {
-        if (!options.accentTypes && !options.accentFunctions) {
+        if (!options.accentTypes && !options.accentFunctions && !options.accentNamespaces) {
             return otherBlock()
         }
 
@@ -1090,11 +1159,39 @@ class BraceScanner(
         }
 
         val header = declarationPart(text.subSequence(headerStart, headerEnd).toString())
+        if (options.accentNamespaces) {
+            val namespaceBlock = classifyNamespaceHeader(header, headerStart)
+            if (namespaceBlock != null) {
+                return namespaceBlock
+            }
+        }
         val typeBlock = classifyTypeHeader(header, headerStart)
         if (typeBlock != null) {
             return typeBlock
         }
         return classifyFunctionHeader(header, headerStart)
+    }
+
+    /**
+     * `namespace Foo.Bar {`.
+     *
+     * No name is recorded on purpose: the label is the bare [NAMESPACE_LABEL], since the name of
+     * a namespace is long, repeated on every file and carries nothing the closing brace needs.
+     * With no name to sample, the colour falls back to the scheme's keyword colour -- see
+     * BraceAccentStyle.baseColor.
+     */
+    private fun classifyNamespaceHeader(header: String, headerStart: Int): OpenBlock? {
+        if (findKeyword(header, NAMESPACE_KEYWORDS) < 0) {
+            return null
+        }
+        return OpenBlock(
+            BlockKind.NAMESPACE,
+            -1,
+            0,
+            NAMESPACE_LABEL,
+            lineNumber,
+            headerOffset = headerStart,
+        )
     }
 
     private fun otherBlock(): OpenBlock {
@@ -1107,12 +1204,29 @@ class BraceScanner(
         header: String,
         headerStart: Int,
         nameIndex: Int,
+        isLambda: Boolean = false,
     ): OpenBlock {
         if (nameIndex < 0) {
-            return OpenBlock(kind, -1, 0, keyword, lineNumber)
+            return OpenBlock(
+                kind,
+                -1,
+                0,
+                keyword,
+                lineNumber,
+                isLambda = isLambda,
+                headerOffset = headerStart,
+            )
         }
         val name = identifierAt(header, nameIndex)
-        return OpenBlock(kind, headerStart + nameIndex, name.length, keyword, lineNumber)
+        return OpenBlock(
+            kind,
+            headerStart + nameIndex,
+            name.length,
+            keyword,
+            lineNumber,
+            isLambda = isLambda,
+            headerOffset = headerStart,
+        )
     }
 
     /**
@@ -1236,7 +1350,14 @@ class BraceScanner(
             val nameEnd = skipGenericsBefore(header, openIndex)
             val nameIndex = identifierStartBefore(header, nameEnd)
             if (nameIndex >= 0) {
-                return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
+                return namedBlock(
+                    BlockKind.FUNCTION,
+                    FUNCTION_KEYWORD,
+                    header,
+                    headerStart,
+                    nameIndex,
+                    isLambda = true,
+                )
             }
         }
 
@@ -1245,10 +1366,24 @@ class BraceScanner(
         if (assignIndex >= 0) {
             val nameIndex = identifierStartBefore(header, assignIndex)
             if (nameIndex >= 0) {
-                return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
+                return namedBlock(
+                    BlockKind.FUNCTION,
+                    FUNCTION_KEYWORD,
+                    header,
+                    headerStart,
+                    nameIndex,
+                    isLambda = true,
+                )
             }
         }
-        return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, -1)
+        return namedBlock(
+            BlockKind.FUNCTION,
+            FUNCTION_KEYWORD,
+            header,
+            headerStart,
+            -1,
+            isLambda = true,
+        )
     }
 
     private fun lastUnclosedParen(header: String): Int {
@@ -1506,7 +1641,12 @@ class BraceScanner(
         /** What the label says for functions: no return type, just `fun Name`. */
         private const val FUNCTION_KEYWORD = "fun"
 
+        /** What a namespace's label prints, standing in for the keyword a type or function has. */
+        private const val NAMESPACE_LABEL = "ns"
+
         private val TYPE_KEYWORDS = setOf("class", "struct", "interface", "enum", "record")
+
+        private val NAMESPACE_KEYWORDS = setOf("namespace")
 
         private val WHERE_KEYWORDS = setOf("where")
 

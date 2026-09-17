@@ -13,19 +13,28 @@ import java.awt.Graphics2D
 import java.awt.Rectangle
 
 /**
- * The label after the closing brace of a long block: `class IosHttpClient`, `fun Update`.
+ * Inline text drawn without touching the document.
  *
- * An inline inlay rather than text, so nothing is written to the file. It sits right after the
- * `}`, where the rest of the line is usually empty, so it shifts nothing.
+ * Two call sites share this renderer: the end-of-block label after `}` (`class IosHttpClient`,
+ * optionally preceded by a dimmed `nest `), and the `nest` marker before a nested block's
+ * own declaration line. [prefixText] is empty for the plain, non-nested label.
+ *
+ * @param leadingSpaces gap before the text, in columns
+ * @param trailingSpaces gap after the text, in columns, so it never sticks to the real code
  */
 class BlockLabelRenderer(
+    private val prefixText: String,
+    private val prefixColor: Color,
     private val labelText: String,
     private val labelColor: Color,
+    private val leadingSpaces: Int,
+    private val trailingSpaces: Int,
 ) : EditorCustomElementRenderer {
 
     override fun calcWidthInPixels(inlay: Inlay<*>): Int {
         val columnWidth = EditorUtil.getSpaceWidth(Font.PLAIN, inlay.editor)
-        return (LEADING_SPACES + labelText.length) * columnWidth
+        val totalColumns = leadingSpaces + prefixText.length + labelText.length + trailingSpaces
+        return totalColumns * columnWidth
     }
 
     override fun paint(
@@ -41,18 +50,20 @@ class BlockLabelRenderer(
 
         val font = editor.colorsScheme.getFont(EditorFontType.ITALIC)
         graphics.font = font
-        graphics.color = labelColor
 
         val metrics = graphics.getFontMetrics(font)
         val lineHeight = editor.lineHeight
         val baseline = targetRegion.y + (lineHeight + metrics.ascent - metrics.descent) / 2
         val columnWidth = EditorUtil.getSpaceWidth(Font.PLAIN, editor)
 
-        graphics.drawString(labelText, targetRegion.x + LEADING_SPACES * columnWidth, baseline)
-    }
+        var x = targetRegion.x + leadingSpaces * columnWidth
+        if (prefixText.isNotEmpty()) {
+            graphics.color = prefixColor
+            graphics.drawString(prefixText, x, baseline)
+            x += prefixText.length * columnWidth
+        }
 
-    private companion object {
-        /** Gap after the brace so the label does not stick to `}`. */
-        const val LEADING_SPACES = 2
+        graphics.color = labelColor
+        graphics.drawString(labelText, x, baseline)
     }
 }

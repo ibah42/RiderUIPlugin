@@ -30,8 +30,14 @@ data class AccentConfig(
 class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Config()) {
 
     class Config : BaseState() {
-        /** Master switch. */
+        /** Master switch: with it off the plugin draws nothing at all. */
         var enabled: Boolean by property(true)
+
+        /**
+         * The move mechanic: phantom lines and the dimming of the text they replace.
+         * Independent of [accentBraces] — either half can run on its own.
+         */
+        var moveBraces: Boolean by property(true)
 
         /** true also splits `} else {` into three lines, not just the hanging `{`. */
         var fullAllman: Boolean by property(true)
@@ -50,6 +56,23 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
 
         /** How far dimmed text moves towards the background when the hint colour is not used. */
         var dimPercent: Int by property(55)
+
+        /**
+         * The colour mechanic: brace accent, shadow and the end-of-block label.
+         * Independent of [moveBraces] — either half can run on its own.
+         */
+        var accentBraces: Boolean by property(true)
+
+        /** Master switch for the `nest` marker, independent of the colour settings below. */
+        var nestedMarkerEnabled: Boolean by property(true)
+
+        /**
+         * Colour of the `nest` marker: before a nested block's own declaration line, and as
+         * the prefix on its end-of-block label. Based on the editor's keyword colour, pushed
+         * towards grey by this percentage, since "nested" names a language construct rather
+         * than a symbol of its own — it should not compete with the block's own accent colour.
+         */
+        var nestedLabelGreyPercent: Int by property(50)
 
         // --- type braces: class, struct, interface, enum, record ---
 
@@ -78,6 +101,23 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         var functionLabel: Boolean by property(true)
         var functionLabelMinLines: Int by property(30)
         var functionLabelGreyPercent: Int by property(50)
+
+        // --- namespace braces ---
+        //
+        // The same knobs as a type or a function, with one difference: there is no minimum
+        // length. A namespace wraps the whole file, so its closing brace is always the one
+        // furthest from its declaration -- the label is exactly what it is needed for.
+
+        var accentNamespaces: Boolean by property(true)
+        var namespaceLightPercent: Int by property(50)
+        var namespaceDarkPercent: Int by property(50)
+        var namespaceBold: Boolean by property(true)
+        var namespaceShadow: Boolean by property(true)
+        var namespaceShadowPercent: Int by property(45)
+        var namespaceShadowOffsetX: Int by property(1)
+        var namespaceShadowOffsetY: Int by property(1)
+        var namespaceLabel: Boolean by property(true)
+        var namespaceLabelGreyPercent: Int by property(50)
 
         /** Apply to any text file, ignoring [extensions]. */
         var allFiles: Boolean by property(false)
@@ -110,6 +150,9 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
 
     /** Settings for one kind of block, so types and functions share the same code path. */
     fun accentFor(kind: BlockKind): AccentConfig? {
+        if (!state.accentBraces) {
+            return null
+        }
         if (kind == BlockKind.TYPE && state.accentTypes) {
             return AccentConfig(
                 lightPercent = state.typeLightPercent,
@@ -138,10 +181,30 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
                 labelGreyPercent = state.functionLabelGreyPercent,
             )
         }
+        if (kind == BlockKind.NAMESPACE && state.accentNamespaces) {
+            return AccentConfig(
+                lightPercent = state.namespaceLightPercent,
+                darkPercent = state.namespaceDarkPercent,
+                bold = state.namespaceBold,
+                shadow = state.namespaceShadow,
+                shadowPercent = state.namespaceShadowPercent,
+                shadowOffsetX = state.namespaceShadowOffsetX,
+                shadowOffsetY = state.namespaceShadowOffsetY,
+                label = state.namespaceLabel,
+                labelMinLines = NAMESPACE_LABEL_MIN_LINES,
+                labelGreyPercent = state.namespaceLabelGreyPercent,
+            )
+        }
         return null
     }
 
     companion object {
+        /**
+         * A namespace has no minimum length: every block is at least zero lines long, so the
+         * label is unconditional without [needsLabel] needing a special case for the kind.
+         */
+        private const val NAMESPACE_LABEL_MIN_LINES = 0
+
         fun getInstance(): AllmanSettings {
             return service()
         }

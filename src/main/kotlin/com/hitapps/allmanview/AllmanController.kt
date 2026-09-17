@@ -1,5 +1,6 @@
 package com.hitapps.allmanview
 
+import com.hitapps.allmanview.scan.BlockKind
 import com.hitapps.allmanview.scan.BraceAccent
 import com.hitapps.allmanview.scan.BraceScanner
 import com.hitapps.allmanview.scan.Dialects
@@ -86,7 +87,12 @@ class AllmanController(private val editor: Editor) : Disposable {
 
         val accentStyle = BraceAccentStyle(editor, settings)
         val braceStyles = buildAccents(accentStyle, result)
-        paintSites(settings, result, braceStyles)
+
+        // The mechanics are independent: any one of them can be off while the others work.
+        if (settings.state.moveBraces) {
+            paintSites(settings, result, braceStyles)
+        }
+        paintNestedMarkers(accentStyle, result)
         paintRealBraces(accentStyle, result, braceStyles)
     }
 
@@ -95,8 +101,9 @@ class AllmanController(private val editor: Editor) : Disposable {
             fullAllman = settings.state.fullAllman,
             splitStatements = settings.state.splitStatements,
             expandInlineBlocks = settings.state.expandInlineBlocks,
-            accentTypes = settings.state.accentTypes,
-            accentFunctions = settings.state.accentFunctions,
+            accentTypes = settings.state.accentBraces && settings.state.accentTypes,
+            accentFunctions = settings.state.accentBraces && settings.state.accentFunctions,
+            accentNamespaces = settings.state.accentBraces && settings.state.accentNamespaces,
         )
     }
 
@@ -145,7 +152,7 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /**
-     * Real `{` and `}` of types and functions: colour, shadow and the long-block label.
+     * Real `{` and `}` of types and functions: colour, shadow and the end-of-block label.
      *
      * A brace already dimmed as "moved down" is left alone, because accenting would contradict
      * the dimming. Its role is played by the phantom, which the renderer colours. The label and
@@ -178,8 +185,67 @@ class AllmanController(private val editor: Editor) : Disposable {
             }
 
             if (style.needsLabel(accent)) {
-                addLabel(accent.offset, braceStyle)
+                addLabel(accent, style, braceStyle)
             }
+        }
+    }
+
+    /**
+     * The `nest` marker before a nested block's own declaration line, in the same colour as
+     * the prefix on its end-of-block label. Placed right after the line's indent, so the real
+     * declaration is pushed right rather than the marker landing in the margin.
+     */
+    private fun paintNestedMarkers(style: BraceAccentStyle, result: ScanResult) {
+        val documentLength = editor.document.textLength
+
+        for (accent in result.accents) {
+            if (!style.needsNestedMarker(accent)) {
+                continue
+            }
+            val headerOffset = headerOffsetOf(accent)
+            if (headerOffset >= documentLength) {
+                continue
+            }
+            addNestedMarker(contentStartOffset(headerOffset), style.nestedMarkerColor())
+        }
+    }
+
+    /** The declaration line, not the brace line: a multi-line signature starts well above it. */
+    private fun headerOffsetOf(opening: BraceAccent): Int {
+        if (opening.headerOffset in 0 until editor.document.textLength) {
+            return opening.headerOffset
+        }
+        return opening.offset
+    }
+
+    /** First non-blank character of the line holding this offset, past its indent. */
+    private fun contentStartOffset(offset: Int): Int {
+        val document = editor.document
+        val lineStart = document.getLineStartOffset(document.getLineNumber(offset))
+        val characters = document.immutableCharSequence
+
+        var end = lineStart
+        while (end < characters.length && (characters[end] == ' ' || characters[end] == '\t')) {
+            end++
+        }
+        return end
+    }
+
+    private fun addNestedMarker(offset: Int, color: Color) {
+        val inlay = editor.inlayModel.addInlineElement(
+            offset,
+            /* relatesToPrecedingText = */ false,
+            BlockLabelRenderer(
+                prefixText = "",
+                prefixColor = color,
+                labelText = NESTED_MARKER_TEXT,
+                labelColor = color,
+                leadingSpaces = 0,
+                trailingSpaces = 1,
+            ),
+        )
+        if (inlay != null) {
+            inlays.add(inlay)
         }
     }
 
@@ -204,11 +270,25 @@ class AllmanController(private val editor: Editor) : Disposable {
         ownHighlighters.add(highlighter)
     }
 
-    private fun addLabel(braceOffset: Int, braceStyle: BraceStyle) {
+    private fun addLabel(accent: BraceAccent, style: BraceAccentStyle, braceStyle: BraceStyle) {
+        val prefixText: String
+        if (style.isNestedMarker(accent)) {
+            prefixText = "$NESTED_MARKER_TEXT "
+        } else {
+            prefixText = ""
+        }
+
         val inlay = editor.inlayModel.addInlineElement(
-            braceOffset + 1,
+            accent.offset + 1,
             /* relatesToPrecedingText = */ true,
-            BlockLabelRenderer(braceStyle.labelText, braceStyle.labelColor),
+            BlockLabelRenderer(
+                prefixText = prefixText,
+                prefixColor = style.nestedMarkerColor(),
+                labelText = braceStyle.labelText,
+                labelColor = braceStyle.labelColor,
+                leadingSpaces = LABEL_LEADING_SPACES,
+                trailingSpaces = 0,
+            ),
         )
         if (inlay != null) {
             inlays.add(inlay)
@@ -216,7 +296,11 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     private fun isDimmed(result: ScanResult, accent: BraceAccent): Boolean {
-        if (!AllmanSettings.getInstance().state.dimOriginal) {
+        val settings = AllmanSettings.getInstance()
+        if (!settings.state.moveBraces) {
+            return false
+        }
+        if (!settings.state.dimOriginal) {
             return false
         }
         for (site in result.sites) {
@@ -330,6 +414,12 @@ class AllmanController(private val editor: Editor) : Disposable {
         private const val SHADOW_LAYER_OFFSET = 80
 
         private const val MAX_PERCENT = 100
+
+        /** Gap after the brace so the end-of-block label does not stick to it. */
+        private const val LABEL_LEADING_SPACES = 2
+
+        /** What marks a nested block, both before its declaration and on its own label. */
+        private const val NESTED_MARKER_TEXT = "nest"
 
         /** The scanner is linear, but a full timed rescan of a huge file is pointless. */
         private const val MAX_FILE_CHARS = 2_000_000

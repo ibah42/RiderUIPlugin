@@ -84,6 +84,18 @@ body, initializers `new Foo() { ... }`, lambdas `() => { }`, and every control c
 Constraints are cut off before classification, otherwise
 `void Bind<T>(T v) where T : class {` would pass for a type.
 
+## Two independent switches
+
+The settings page has one master checkbox and two mechanics under it, each with its own switch:
+
+- **Move braces down** — the phantom lines plus the dimming of the text they stand in for.
+- **Accent braces** — the colour, the shadow and the end-of-block label.
+
+Either can be turned off on its own. With the moves off, the file keeps its K&R shape on screen
+and the braces of types and functions are still accented in place; with the accent off, the moves
+work with the ordinary editor colours. The master checkbox at the top turns both off, and then the
+editor shows the file exactly as it is on disk.
+
 ## How it works
 
 The original text **stays where it is** — it is simply dimmed, and the phantom is drawn next to
@@ -165,7 +177,7 @@ The wrapper is in the repository, so Gradle does not need to be installed separa
 ```
 gradlew.bat test        # scanner tests
 gradlew.bat runIde      # launches a sandbox IDE with the plugin
-gradlew.bat buildPlugin # build/distributions/allman-view-1.0.0.zip
+gradlew.bat buildPlugin # build/distributions/allman-view-1.1.0.zip
 ```
 
 The versions are pinned the way they are because:

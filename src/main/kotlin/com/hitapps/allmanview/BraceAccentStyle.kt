@@ -83,7 +83,11 @@ class BraceAccentStyle(
         return style
     }
 
-    /** Only the closing brace of a long enough block gets a label. */
+    /**
+     * A nested block always gets a label, however short it is: with the fences gone, the label
+     * is the only thing left that names it. A top-level block only earns one once it is long
+     * enough that its own opening line has scrolled out of view.
+     */
     fun needsLabel(accent: BraceAccent): Boolean {
         if (accent.isOpening) {
             return false
@@ -95,25 +99,88 @@ class BraceAccentStyle(
         if (labelText(accent).isEmpty()) {
             return false
         }
+        if (isNestedMarker(accent)) {
+            return true
+        }
         return accent.spannedLines >= config.labelMinLines
     }
 
+    /**
+     * The declaration line of a nested block also gets a `nest` marker before it, in the same
+     * colour as the prefix on its end-of-block label.
+     */
+    fun needsNestedMarker(accent: BraceAccent): Boolean {
+        if (!accent.isOpening) {
+            return false
+        }
+        if (!isNestedMarker(accent)) {
+            return false
+        }
+        val config = settings.accentFor(accent.kind)
+        return config != null && config.label
+    }
+
+    /**
+     * True for a block nested inside another of the same kind, except a lambda: lambdas are
+     * common and short, so marking every one of them would be noise the ordinary label already
+     * handles through [AccentConfig.labelMinLines]. Also false outright when the marker is
+     * switched off, so both call sites (the label prefix and the declaration-line marker) go
+     * quiet together.
+     */
+    fun isNestedMarker(accent: BraceAccent): Boolean {
+        if (!settings.state.nestedMarkerEnabled) {
+            return false
+        }
+        return accent.isNested && !accent.isLambda
+    }
+
+    /**
+     * Colour of the `nest` marker text itself: the editor's own keyword colour, pushed towards
+     * grey by [AllmanSettings.Config.nestedLabelGreyPercent]. Independent of the block's own
+     * accent colour, since "nested" names a language construct, not a symbol.
+     */
+    fun nestedMarkerColor(): Color {
+        val scheme = editor.colorsScheme
+        val keywordColor = scheme.getAttributes(DefaultLanguageHighlighterColors.KEYWORD)
+            ?.foregroundColor
+            ?: scheme.defaultForeground
+        return towardsGrey(keywordColor, settings.state.nestedLabelGreyPercent)
+    }
+
+    /**
+     * A lambda's label shows the lambda symbol instead of `fun`: it has no declaration of its
+     * own to be a `fun` of, and lambda calculus already owns the glyph (the Half-Life logo is
+     * the same choice, for the same reason).
+     */
     private fun labelText(accent: BraceAccent): String {
         if (accent.keyword.isEmpty()) {
             return ""
         }
+        val keyword: String
+        if (accent.isLambda) {
+            keyword = LAMBDA_SYMBOL
+        } else {
+            keyword = accent.keyword
+        }
+
         if (accent.nameOffset < 0 || accent.nameLength <= 0) {
-            return accent.keyword
+            return keyword
         }
 
         val end = accent.nameOffset + accent.nameLength
         if (end > editor.document.textLength) {
-            return accent.keyword
+            return keyword
         }
         val name = editor.document.immutableCharSequence.subSequence(accent.nameOffset, end)
-        return accent.keyword + " " + name
+        return keyword + " " + name
     }
 
+    /**
+     * Sampled from the block's own name, so the brace matches whatever the scheme paints that
+     * name. A namespace has no name recorded, so the sampler returns null for its offset of -1
+     * and it lands on the keyword colour below -- which is the right answer for it anyway:
+     * `ns` names a language construct, not a symbol.
+     */
     private fun baseColor(accent: BraceAccent): Color {
         val sampled = EditorColorSampler.foregroundAt(editor, accent.nameOffset)
         if (sampled != null) {
@@ -121,10 +188,16 @@ class BraceAccentStyle(
         }
 
         val key: TextAttributesKey
-        if (accent.kind == BlockKind.TYPE) {
-            key = DefaultLanguageHighlighterColors.CLASS_NAME
-        } else {
-            key = DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
+        when (accent.kind) {
+            BlockKind.TYPE -> {
+                key = DefaultLanguageHighlighterColors.CLASS_NAME
+            }
+            BlockKind.NAMESPACE -> {
+                key = DefaultLanguageHighlighterColors.KEYWORD
+            }
+            else -> {
+                key = DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
+            }
         }
 
         val scheme = editor.colorsScheme
@@ -167,5 +240,8 @@ class BraceAccentStyle(
 
     private companion object {
         const val MAX_PERCENT = 100
+
+        /** Greek lowercase lambda, standing in for `fun` on a lambda's own label. */
+        const val LAMBDA_SYMBOL = "λ"
     }
 }
