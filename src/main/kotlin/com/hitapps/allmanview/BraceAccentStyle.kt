@@ -52,11 +52,19 @@ class BraceAccentStyle(
             return cached
         }
 
-        val braceColor = shiftAwayFromBackground(
-            baseColor(accent),
-            config.lightPercent,
-            config.darkPercent,
-        )
+        val base = baseColor(accent)
+        val braceColor = shiftAwayFromBackground(base, config.lightPercent, config.darkPercent)
+
+        // A label that names a symbol follows its brace, shifted away from the background along
+        // with it. A label that names a language construct does not: `ns` is the editor's own
+        // keyword colour, and shifting that away from the background is exactly what made it
+        // read darker than every other keyword on screen.
+        val labelBase: Color
+        if (accent.kind == BlockKind.NAMESPACE) {
+            labelBase = base
+        } else {
+            labelBase = braceColor
+        }
 
         val attributes = TextAttributes()
         attributes.foregroundColor = braceColor
@@ -77,7 +85,7 @@ class BraceAccentStyle(
             shadowOffsetX = config.shadowOffsetX,
             shadowOffsetY = config.shadowOffsetY,
             labelText = labelText(accent),
-            labelColor = ColorBalance.towardsGrey(braceColor, config.labelGreyPercent),
+            labelColor = ColorBalance.towardsGrey(labelBase, config.labelGreyPercent),
         )
         cache[cacheKey] = style
         return style
@@ -140,11 +148,18 @@ class BraceAccentStyle(
      * accent colour, since "nested" names a language construct, not a symbol.
      */
     fun nestedMarkerColor(): Color {
+        return ColorBalance.towardsGrey(keywordColor(), settings.state.nestedLabelGreyPercent)
+    }
+
+    /** The editor's own keyword colour: the base of every marker that names a construct. */
+    private fun keywordColor(): Color {
         val scheme = editor.colorsScheme
-        val keywordColor = scheme.getAttributes(DefaultLanguageHighlighterColors.KEYWORD)
+        val fromScheme = scheme.getAttributes(DefaultLanguageHighlighterColors.KEYWORD)
             ?.foregroundColor
-            ?: scheme.defaultForeground
-        return ColorBalance.towardsGrey(keywordColor, settings.state.nestedLabelGreyPercent)
+        if (fromScheme != null) {
+            return fromScheme
+        }
+        return scheme.defaultForeground
     }
 
     /**
@@ -182,22 +197,21 @@ class BraceAccentStyle(
      * `ns` names a language construct, not a symbol.
      */
     private fun baseColor(accent: BraceAccent): Color {
+        // A namespace records no name, so there is nothing to sample: it simply is the keyword.
+        if (accent.kind == BlockKind.NAMESPACE) {
+            return keywordColor()
+        }
+
         val sampled = EditorColorSampler.foregroundAt(editor, accent.nameOffset)
         if (sampled != null) {
             return sampled
         }
 
         val key: TextAttributesKey
-        when (accent.kind) {
-            BlockKind.TYPE -> {
-                key = DefaultLanguageHighlighterColors.CLASS_NAME
-            }
-            BlockKind.NAMESPACE -> {
-                key = DefaultLanguageHighlighterColors.KEYWORD
-            }
-            else -> {
-                key = DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
-            }
+        if (accent.kind == BlockKind.TYPE) {
+            key = DefaultLanguageHighlighterColors.CLASS_NAME
+        } else {
+            key = DefaultLanguageHighlighterColors.FUNCTION_DECLARATION
         }
 
         val scheme = editor.colorsScheme

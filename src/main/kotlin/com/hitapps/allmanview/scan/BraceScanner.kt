@@ -1,143 +1,5 @@
 package com.hitapps.allmanview.scan
 
-/**
- * Lexer dialect. It only exists to find string literal boundaries correctly; everything else
- * is the same across C-like languages.
- */
-enum class Flavor {
-    /** C#: `@"verbatim"`, `"""raw"""`, `$"interp"` */
-    CSHARP,
-
-    /** C/C++/shaders: `R"delim(raw)delim"`, `1'000'000` */
-    CPP,
-
-    /** Java, Kotlin, Scala, Groovy, Swift, Dart: `"""` text blocks */
-    JVM,
-
-    /** JS, TS, Go, PHP: `` `template ${literals}` `` */
-    WEB,
-
-    /** Everything else: only `"..."` and `'...'`. The safe default. */
-    GENERIC,
-}
-
-/** Who a curly block belongs to. */
-enum class BlockKind {
-    /** class, struct, interface, enum, record. */
-    TYPE,
-
-    /** A method, constructor or local function declaration. */
-    FUNCTION,
-
-    /**
-     * A `namespace` block. A kind of its own rather than a flag on [OTHER]: it then flows
-     * through the same accent pipeline as the two above -- colour, weight, shadow, label --
-     * and a namespace inside a namespace counts as nested, exactly like a type inside a type.
-     */
-    NAMESPACE,
-
-    /** Everything else: if, loops, lambdas, initializers, properties. */
-    OTHER,
-}
-
-/**
- * A brace that should stand out more than the rest.
- *
- * @param offset offset of the brace itself in the document
- * @param kind which kind of block it belongs to
- * @param nameOffset offset of the type or method name the base colour comes from; -1 if none
- * @param nameLength length of that name
- * @param keyword what to print in the label: `class`, `struct`, `fun`
- * @param isOpening whether this is the opening or the closing brace
- * @param spannedLines how many lines the block covers; always 0 for the opening brace
- * @param isNested another block of the same kind encloses this one: a type inside a type, or a
- *   local function inside a function. Any depth counts, so only the outermost one is not nested.
- * @param isLambda the block is a lambda or an anonymous delegate rather than a declared function
- * @param headerOffset offset where the declaration itself starts, which for a multi-line
- *   signature is well before the brace; -1 when the block has no header
- */
-data class BraceAccent(
-    val offset: Int,
-    val kind: BlockKind,
-    val nameOffset: Int,
-    val nameLength: Int,
-    val keyword: String,
-    val isOpening: Boolean,
-    val spannedLines: Int,
-    val isNested: Boolean = false,
-    val isLambda: Boolean = false,
-    val headerOffset: Int = -1,
-)
-
-/** What exactly to split. */
-data class ScanOptions(
-    /** Split `} else {` into three lines, not just the hanging `{`. */
-    val fullAllman: Boolean = true,
-
-    /** Split `if (x) return;` into two lines. */
-    val splitStatements: Boolean = true,
-
-    /** Expand `if (x) { Foo(); }` into four lines. */
-    val expandInlineBlocks: Boolean = true,
-
-    /** Mark type braces: class, struct, interface, enum, record. */
-    val accentTypes: Boolean = true,
-
-    /** Mark braces of functions, methods, constructors and lambdas. */
-    val accentFunctions: Boolean = true,
-
-    /** Mark namespace braces. */
-    val accentNamespaces: Boolean = true,
-)
-
-/**
- * A single phantom line.
- *
- * The text is always a contiguous slice of the document, so the renderer can fetch its real
- * highlighting: the character at index `i` lives at `sourceOffset + i` in the document.
- *
- * @param text what to draw
- * @param sourceOffset offset of that text in the document
- * @param extraIndentLevels how many levels deeper than the owner line's indent.
- *   Levels rather than spaces: only the editor knows how wide a level is, and
- *   `Graphics.drawString` does not expand a tab, so the indent would vanish.
- */
-data class PhantomLine(
-    val text: String,
-    val sourceOffset: Int,
-    val extraIndentLevels: Int = 0,
-)
-
-/**
- * One place where a line is visually broken into Allman style.
- *
- * The original text is not hidden: it stays where it is and is dimmed to grey, while the
- * phantom is drawn underneath in the normal colour.
- *
- * @param dimStart offset of the first dimmed character
- * @param dimEnd offset just past the dimmed slice (exclusive)
- * @param anchorOffset offset of the owner line's end, the anchor for the block inlay
- * @param indent leading whitespace of the owner line, verbatim (tabs/spaces)
- * @param phantomLines what to draw as phantom lines, top to bottom
- */
-data class PhantomSite(
-    val dimStart: Int,
-    val dimEnd: Int,
-    val anchorOffset: Int,
-    val indent: String,
-    val phantomLines: List<PhantomLine>,
-) {
-    /** Phantom texts only, handy in tests and logs. */
-    val phantomTexts: List<String>
-        get() = phantomLines.map { it.text }
-}
-
-/** The result of one pass over the document. */
-data class ScanResult(
-    val sites: List<PhantomSite>,
-    val accents: List<BraceAccent>,
-)
-
 /** Lexer state. */
 private enum class LexerState {
     CODE,
@@ -171,22 +33,6 @@ private class InterpolationFrame(
     val cppRawDelimiter: String,
     val holeBraceDepth: Int,
 )
-
-/** An open block on the nesting stack. */
-private class OpenBlock(
-    val kind: BlockKind,
-    val nameOffset: Int,
-    val nameLength: Int,
-    val keyword: String,
-    val openLineNumber: Int,
-    val isLambda: Boolean = false,
-
-    /** Where the declaration starts, which for a multi-line signature is not the brace line. */
-    val headerOffset: Int = -1,
-) {
-    /** Filled in when the block is pushed, so the closing brace reports the same value. */
-    var isNested: Boolean = false
-}
 
 /** A parsed string literal prefix: `$`, `@`, `R`. */
 private class LiteralPrefix(
@@ -237,6 +83,9 @@ class BraceScanner(
 
     /** Stack of open `{`: a closing brace uses it to learn whose block it closes. */
     private val blockStack = ArrayDeque<OpenBlock>()
+
+    /** Stateless: it is handed the header slice and answers what kind of block it declares. */
+    private val classifier = BlockClassifier(options)
 
     private val textLength = text.length
 
@@ -1137,9 +986,16 @@ class BraceScanner(
         return false
     }
 
+    /**
+     * Finds the header this brace belongs to and hands it to [BlockClassifier].
+     *
+     * Only the part that needs scanner state lives here: which slice of the document is the
+     * header. Reading that slice is the classifier's job, and it needs nothing else from here.
+     */
     private fun classifyBlock(braceOffset: Int): OpenBlock {
+        // Nothing to classify into: skip the slicing too, not just the classification.
         if (!options.accentTypes && !options.accentFunctions && !options.accentNamespaces) {
-            return otherBlock()
+            return classifier.otherBlock(lineNumber)
         }
 
         var headerStart = headerStartFor(braceOffset)
@@ -1148,101 +1004,20 @@ class BraceScanner(
         if (firstCodeOffset == braceOffset) {
             // the brace is the first code on the line, so the code is Allman and the header is above
             if (previousCodeEnd <= 0 || previousCodeEnd > braceOffset) {
-                return otherBlock()
+                return classifier.otherBlock(lineNumber)
             }
             headerStart = previousCodeStart
             headerEnd = previousCodeEnd
         }
 
         if (headerStart >= headerEnd) {
-            return otherBlock()
+            return classifier.otherBlock(lineNumber)
         }
 
-        val header = declarationPart(text.subSequence(headerStart, headerEnd).toString())
-        if (options.accentNamespaces) {
-            val namespaceBlock = classifyNamespaceHeader(header, headerStart)
-            if (namespaceBlock != null) {
-                return namespaceBlock
-            }
-        }
-        val typeBlock = classifyTypeHeader(header, headerStart)
-        if (typeBlock != null) {
-            return typeBlock
-        }
-        return classifyFunctionHeader(header, headerStart)
+        val rawHeader = text.subSequence(headerStart, headerEnd).toString()
+        return classifier.classify(rawHeader, headerStart, lineNumber)
     }
 
-    /**
-     * `namespace Foo.Bar {`.
-     *
-     * No name is recorded on purpose: the label is the bare [NAMESPACE_LABEL], since the name of
-     * a namespace is long, repeated on every file and carries nothing the closing brace needs.
-     * With no name to sample, the colour falls back to the scheme's keyword colour -- see
-     * BraceAccentStyle.baseColor.
-     */
-    private fun classifyNamespaceHeader(header: String, headerStart: Int): OpenBlock? {
-        if (findKeyword(header, NAMESPACE_KEYWORDS) < 0) {
-            return null
-        }
-        return OpenBlock(
-            BlockKind.NAMESPACE,
-            -1,
-            0,
-            NAMESPACE_LABEL,
-            lineNumber,
-            headerOffset = headerStart,
-        )
-    }
-
-    private fun otherBlock(): OpenBlock {
-        return OpenBlock(BlockKind.OTHER, -1, 0, "", lineNumber)
-    }
-
-    private fun namedBlock(
-        kind: BlockKind,
-        keyword: String,
-        header: String,
-        headerStart: Int,
-        nameIndex: Int,
-        isLambda: Boolean = false,
-    ): OpenBlock {
-        if (nameIndex < 0) {
-            return OpenBlock(
-                kind,
-                -1,
-                0,
-                keyword,
-                lineNumber,
-                isLambda = isLambda,
-                headerOffset = headerStart,
-            )
-        }
-        val name = identifierAt(header, nameIndex)
-        return OpenBlock(
-            kind,
-            headerStart + nameIndex,
-            name.length,
-            keyword,
-            lineNumber,
-            isLambda = isLambda,
-            headerOffset = headerStart,
-        )
-    }
-
-    /**
-     * The header without literals and without constraints.
-     *
-     * Constraints are cut before classification, otherwise `void Bind<T>(T v) where T : class {`
-     * would see the word `class` and pass as a type declaration.
-     */
-    private fun declarationPart(header: String): String {
-        val withoutLiterals = header.substring(0, quoteLimit(header))
-        val whereIndex = findKeyword(withoutLiterals, WHERE_KEYWORDS)
-        if (whereIndex < 0) {
-            return withoutLiterals
-        }
-        return withoutLiterals.substring(0, whereIndex)
-    }
 
     /**
      * Where this brace's header begins.
@@ -1264,285 +1039,6 @@ class BraceScanner(
             }
         }
         return start
-    }
-
-    private fun classifyTypeHeader(header: String, headerStart: Int): OpenBlock? {
-        val keywordIndex = findKeyword(header, TYPE_KEYWORDS)
-        if (keywordIndex < 0) {
-            return null
-        }
-        val keyword = keywordAt(header, keywordIndex, TYPE_KEYWORDS) ?: return null
-
-        // `record struct Point`: several keywords can follow one another
-        var cursor = keywordIndex
-        while (true) {
-            val next = keywordAt(header, cursor, TYPE_KEYWORDS)
-            if (next == null) {
-                break
-            }
-            cursor = skipSpacesIn(header, cursor + next.length)
-        }
-
-        val nameIndex = identifierStartAt(header, cursor)
-        if (nameIndex >= 0) {
-            return namedBlock(BlockKind.TYPE, keyword, header, headerStart, nameIndex)
-        }
-
-        // Go: in `type Point struct {` the name comes before the keyword
-        val beforeIndex = identifierStartBefore(header, keywordIndex)
-        return namedBlock(BlockKind.TYPE, keyword, header, headerStart, beforeIndex)
-    }
-
-    private fun classifyFunctionHeader(header: String, headerStart: Int): OpenBlock {
-        val trimmed = header.trimEnd()
-
-        // check the lambda first: `return items.Select(x => {` is a lambda body,
-        // even though the line starts with the word return
-        if (trimmed.endsWith("=>") || endsWithWord(trimmed, "delegate")) {
-            return lambdaBlock(header, headerStart)
-        }
-        if (!trimmed.endsWith(")")) {
-            return otherBlock()
-        }
-
-        val firstWordIndex = identifierStartAt(header, 0)
-        if (firstWordIndex < 0) {
-            return otherBlock()
-        }
-        val firstWord = identifierAt(header, firstWordIndex)
-        if (firstWord == "delegate") {
-            // an anonymous method with a parameter list: `delegate(int x) {`
-            return lambdaBlock(header, headerStart)
-        }
-        if (firstWord in NON_DECLARATION_KEYWORDS) {
-            return otherBlock()
-        }
-        if (containsAssignment(header)) {
-            // `var a = new Foo() {` is an initializer, not a declaration
-            return otherBlock()
-        }
-
-        val parenIndex = header.indexOf('(')
-        if (parenIndex < 0) {
-            return otherBlock()
-        }
-
-        val nameEnd = skipGenericsBefore(header, parenIndex)
-        val nameIndex = identifierStartBefore(header, nameEnd)
-        if (nameIndex < 0) {
-            return otherBlock()
-        }
-        return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex)
-    }
-
-    /**
-     * A lambda or an anonymous method.
-     *
-     * They have no name of their own, so the nearest meaningful one is used: the assignment
-     * target (`Action handler = () => {`) or the method the lambda is passed to
-     * (`Run(() => {`). The colour comes from the same place.
-     */
-    private fun lambdaBlock(header: String, headerStart: Int): OpenBlock {
-        // The call the lambda is passed to comes first: in `var r = items.Select(y => {`
-        // the meaningful name is Select, not the variable on the left.
-        val openIndex = lastUnclosedParen(header)
-        if (openIndex >= 0) {
-            val nameEnd = skipGenericsBefore(header, openIndex)
-            val nameIndex = identifierStartBefore(header, nameEnd)
-            if (nameIndex >= 0) {
-                return namedBlock(
-                    BlockKind.FUNCTION,
-                    FUNCTION_KEYWORD,
-                    header,
-                    headerStart,
-                    nameIndex,
-                    isLambda = true,
-                )
-            }
-        }
-
-        // No parentheses means the lambda is simply assigned: `Action handler = () => {`
-        val assignIndex = assignmentIndex(header)
-        if (assignIndex >= 0) {
-            val nameIndex = identifierStartBefore(header, assignIndex)
-            if (nameIndex >= 0) {
-                return namedBlock(
-                    BlockKind.FUNCTION,
-                    FUNCTION_KEYWORD,
-                    header,
-                    headerStart,
-                    nameIndex,
-                    isLambda = true,
-                )
-            }
-        }
-        return namedBlock(
-            BlockKind.FUNCTION,
-            FUNCTION_KEYWORD,
-            header,
-            headerStart,
-            -1,
-            isLambda = true,
-        )
-    }
-
-    private fun lastUnclosedParen(header: String): Int {
-        val opened = ArrayList<Int>()
-        for (index in header.indices) {
-            if (header[index] == '(') {
-                opened.add(index)
-            }
-            if (header[index] == ')' && opened.isNotEmpty()) {
-                opened.removeAt(opened.size - 1)
-            }
-        }
-        if (opened.isEmpty()) {
-            return -1
-        }
-        return opened[opened.size - 1]
-    }
-
-    /** Nothing after the first quote in a header can be parsed; that is a literal. */
-    private fun quoteLimit(header: String): Int {
-        val quoteIndex = header.indexOf('"')
-        if (quoteIndex < 0) {
-            return header.length
-        }
-        return quoteIndex
-    }
-
-    private fun findKeyword(header: String, keywords: Set<String>): Int {
-        val limit = quoteLimit(header)
-        for (index in 0 until limit) {
-            if (index > 0 && isIdentifierChar(header[index - 1])) {
-                continue
-            }
-            if (keywordAt(header, index, keywords) != null) {
-                return index
-            }
-        }
-        return -1
-    }
-
-    private fun keywordAt(header: String, index: Int, keywords: Set<String>): String? {
-        for (keyword in keywords) {
-            if (!header.startsWith(keyword, index)) {
-                continue
-            }
-            val following = header.getOrNull(index + keyword.length)
-            if (following != null && isIdentifierChar(following)) {
-                continue
-            }
-            return keyword
-        }
-        return null
-    }
-
-    private fun endsWithWord(header: String, word: String): Boolean {
-        if (!header.endsWith(word)) {
-            return false
-        }
-        val before = header.getOrNull(header.length - word.length - 1)
-        return before == null || !isIdentifierChar(before)
-    }
-
-    /** In `Foo<T>(` the name precedes the generic parameters, so `<...>` is rewound. */
-    private fun skipGenericsBefore(header: String, parenIndex: Int): Int {
-        var cursor = parenIndex - 1
-        while (cursor >= 0 && header[cursor].isWhitespace()) {
-            cursor--
-        }
-        if (cursor < 0 || header[cursor] != '>') {
-            return cursor + 1
-        }
-
-        var depth = 0
-        while (cursor >= 0) {
-            if (header[cursor] == '>') {
-                depth++
-            }
-            if (header[cursor] == '<') {
-                depth--
-                if (depth == 0) {
-                    return cursor
-                }
-            }
-            cursor--
-        }
-        return parenIndex
-    }
-
-    /** Index of an assignment `=`, but not of `==`, `=>`, `<=`, `>=`, `!=`. */
-    private fun assignmentIndex(header: String): Int {
-        for (index in header.indices) {
-            if (header[index] != '=') {
-                continue
-            }
-            val previous = header.getOrNull(index - 1)
-            val next = header.getOrNull(index + 1)
-            val isComparison = previous == '=' || previous == '!' || previous == '<' ||
-                previous == '>' || next == '=' || next == '>'
-            if (!isComparison) {
-                return index
-            }
-        }
-        return -1
-    }
-
-    private fun containsAssignment(header: String): Boolean {
-        return assignmentIndex(header) >= 0
-    }
-
-    private fun skipSpacesIn(header: String, from: Int): Int {
-        var cursor = from
-        while (cursor < header.length && header[cursor].isWhitespace()) {
-            cursor++
-        }
-        return cursor
-    }
-
-    private fun identifierStartAt(header: String, from: Int): Int {
-        val cursor = skipSpacesIn(header, from)
-        if (cursor >= header.length) {
-            return -1
-        }
-        if (!isIdentifierStart(header[cursor])) {
-            return -1
-        }
-        return cursor
-    }
-
-    private fun identifierStartBefore(header: String, endExclusive: Int): Int {
-        var cursor = endExclusive - 1
-        while (cursor >= 0 && header[cursor].isWhitespace()) {
-            cursor--
-        }
-        if (cursor < 0 || !isIdentifierChar(header[cursor])) {
-            return -1
-        }
-        while (cursor > 0 && isIdentifierChar(header[cursor - 1])) {
-            cursor--
-        }
-        if (!isIdentifierStart(header[cursor])) {
-            return -1
-        }
-        return cursor
-    }
-
-    private fun identifierAt(header: String, start: Int): String {
-        var end = start
-        while (end < header.length && isIdentifierChar(header[end])) {
-            end++
-        }
-        return header.substring(start, end)
-    }
-
-    private fun isIdentifierChar(character: Char): Boolean {
-        return character.isLetterOrDigit() || character == '_'
-    }
-
-    private fun isIdentifierStart(character: Char): Boolean {
-        return character.isLetter() || character == '_'
     }
 
     // ------------------------------------------------------------------ small helpers
@@ -1637,28 +1133,6 @@ class BraceScanner(
 
     companion object {
         private val SPLIT_KEYWORDS = setOf("else", "catch", "finally")
-
-        /** What the label says for functions: no return type, just `fun Name`. */
-        private const val FUNCTION_KEYWORD = "fun"
-
-        /** What a namespace's label prints, standing in for the keyword a type or function has. */
-        private const val NAMESPACE_LABEL = "ns"
-
-        private val TYPE_KEYWORDS = setOf("class", "struct", "interface", "enum", "record")
-
-        private val NAMESPACE_KEYWORDS = setOf("namespace")
-
-        private val WHERE_KEYWORDS = setOf("where")
-
-        /**
-         * These words start anything but a function declaration.
-         * Without them `return new Foo() {` and `switch (x) {` would count as functions.
-         */
-        private val NON_DECLARATION_KEYWORDS = setOf(
-            "if", "for", "foreach", "while", "switch", "using", "lock", "fixed",
-            "catch", "do", "else", "try", "finally", "return", "throw", "yield",
-            "await", "new", "unsafe", "checked", "unchecked",
-        )
 
         /** Keywords a splittable construct can start with. */
         private val HEADER_KEYWORDS = listOf(
