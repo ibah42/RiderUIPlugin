@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.hitapps"
-version = "0.9.0"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -24,13 +24,13 @@ dependencies {
         )
         testFramework(TestFrameworkType.Platform)
     }
-    // kotlin-stdlib сознательно не подключаем: его даёт сама IDE
-    // (см. kotlin.stdlib.default.dependency=false в gradle.properties).
+    // kotlin-stdlib is deliberately not declared: the IDE ships its own
+    // (see kotlin.stdlib.default.dependency=false in gradle.properties).
     testImplementation("junit:junit:4.13.2")
 }
 
 kotlin {
-    // Платформа 2026.x работает на JBR 21 — собираем под неё, а не под JDK, которым запущен Gradle.
+    // The 2026.x platform runs on JBR 21, so target that rather than the JDK running Gradle.
     jvmToolchain(21)
 }
 
@@ -38,8 +38,8 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            // untilBuild намеренно не задаём — берётся дефолт от целевой сборки.
-            // Когда выйдет следующий Rider, поднять platformVersion и пересобрать.
+            // untilBuild is deliberately left unset: the default comes from the target build.
+            // When the next Rider ships, raise platformVersion and rebuild.
         }
     }
     buildSearchableOptions = false

@@ -1,27 +1,26 @@
-# Инструкции для ИИ-агентов
+# Instructions for AI agents
 
-Правила Ивана. Читать до того, как писать код, а не после ревью.
+Ivan's rules. Read them before writing code, not after the review.
 
-Раздел «Стиль кода» не привязан к этому проекту — его можно копировать в другие репозитории
-как есть.
+The "Code style" section is not tied to this project — copy it into other repositories as is.
 
 ---
 
-## Стиль кода
+## Code style
 
-### 1. Не сокращать имена
+### 1. Do not abbreviate names
 
-Полные слова. Всегда.
+Whole words. Always.
 
 ```kotlin
-// нельзя
+// wrong
 private var i = 0
 private var n = text.length
 private var q = 0
 val fm = graphics.fontMetrics
 fun forExtension(ext: String)
 
-// надо
+// right
 private var position = 0
 private var textLength = text.length
 private var quoteRun = 0
@@ -29,27 +28,28 @@ val fontMetrics = graphics.fontMetrics
 fun forExtension(extension: String)
 ```
 
-Строже всего — для членов класса: поля, свойства, константы. Их читают в отрыве от места
-объявления, и `n` там не значит ничего.
+This is strictest for class members: fields, properties, constants. They are read far away from
+their declaration, and `n` means nothing there.
 
-Короткое имя допустимо ровно в одном случае — настоящий счётчик цикла (`index`, `count`).
-Но и его лучше назвать по смыслу: `lineIndex`, `columnCount`.
+A short name is acceptable in exactly one case — a genuine loop counter (`index`, `count`).
+Even then a meaningful name is better: `lineIndex`, `columnCount`.
 
-Параметры функций — тоже полные слова, включая параметры `override`. Имя из базового класса
-переопределять можно и нужно: `g: Graphics` → `graphics`, `e: AnActionEvent` → `event`.
+Function parameters are whole words too, including the parameters of an `override`. Renaming a
+parameter inherited from the base class is allowed and encouraged: `g: Graphics` → `graphics`,
+`e: AnActionEvent` → `event`.
 
-### 2. Никаких однострочных тел
+### 2. No single-line bodies
 
-У `if`, `else`, `for`, `while`, `when` тело всегда на отдельной строке и всегда в фигурных
-скобках. Даже если это один `return`.
+The body of an `if`, `else`, `for`, `while` or `when` always goes on its own line and always in
+braces. Even when it is a single `return`.
 
 ```kotlin
-// нельзя
+// wrong
 if (editor.isDisposed) return
 if (bracketDepth > 0) bracketDepth--
 for (inlay in inlays) Disposer.dispose(inlay)
 
-// надо
+// right
 if (editor.isDisposed) {
     return
 }
@@ -61,16 +61,15 @@ for (inlay in inlays) {
 }
 ```
 
-Это же относится к `if` в роли выражения. Тернарник в одну строку не экономит ничего, кроме
-читаемости:
+The same applies to `if` used as an expression. A one-line ternary saves nothing but readability:
 
 ```kotlin
-// нельзя
+// wrong
 position += if (hasNext) 2 else 1
 val indentStart = if (isContinuation) statementLineStartOffset else lineStartOffset
-presentation.text = if (isEnabled) "вкл" else "выкл"
+presentation.text = if (isEnabled) "on" else "off"
 
-// надо
+// right
 if (hasNext) {
     position += 2
 } else {
@@ -85,18 +84,18 @@ if (isContinuation) {
 }
 ```
 
-Вертикаль не экономим. Место на экране дешевле времени на чтение.
+Do not save vertical space. Screen space is cheaper than reading time.
 
-Исключения, где однострочность нормальна: `?:` для раннего выхода, `?.let { }`,
-expression-body функции без ветвлений (`fun columnWidth(): Int = ...`), однострочные ветки
-`when`, которые вызывают ровно одну функцию без условий.
+Exceptions where a single line is fine: `?:` for an early exit, `?.let { }`, expression-body
+functions with no branching (`fun columnWidth(): Int = ...`), and single-line `when` branches
+that call exactly one function with no conditions.
 
-### 3. `when` — с субъектом
+### 3. `when` takes a subject
 
-Если все ветки сравнивают одно и то же значение, оно выносится в заголовок.
+If every branch compares the same value, that value goes into the header.
 
 ```kotlin
-// нельзя
+// wrong
 when {
     current == '\\' -> advanceOverEscape()
     current == '"' -> closeStringLiteral()
@@ -104,7 +103,7 @@ when {
     else -> position++
 }
 
-// надо
+// right
 when (current) {
     '\\' -> {
         advanceOverEscape()
@@ -113,7 +112,7 @@ when (current) {
         closeStringLiteral()
     }
     '{' -> {
-        stepInterpolationBraceOrSkip()   // условие уехало внутрь
+        stepInterpolationBraceOrSkip()   // the condition moved inside
     }
     else -> {
         position++
@@ -121,114 +120,116 @@ when (current) {
 }
 ```
 
-Составное условие не повод возвращаться к `when {}` — его надо убрать внутрь ветки или в
-отдельную функцию с говорящим именем. Guard-синтаксис (`'{' if dollars > 0 ->`) не
-использовать: он появился только в Kotlin 2.1, а привязка к версии языка ради одной строки
-того не стоит.
+A compound condition is not a reason to fall back to `when {}` — move it inside the branch or
+into a separate function with a descriptive name. Do not use the guard syntax
+(`'{' if dollars > 0 ->`): it only arrived in Kotlin 2.1, and pinning the language version for
+the sake of one line is not worth it.
 
-### 4. Фигурные скобки ставятся всегда
+### 4. Braces are always written out
 
-Даже там, где язык разрешает их опустить. Физическое расположение открывающей скобки —
-по конвенции языка (в Kotlin в конце строки): Иван смотрит код через Allman View, который
-показывает Allman визуально, так что менять сам файл не нужно.
+Even where the language allows omitting them. The physical position of the opening brace follows
+the language convention (end of line in Kotlin): Ivan reads code through Allman View, which shows
+Allman visually, so the file itself does not need to change.
 
-### 5. Магические числа — в именованные константы
+### 5. Magic numbers become named constants
 
 ```kotlin
-// нельзя
+// wrong
 HighlighterLayer.LAST + 100
 ColorUtil.mix(foreground, background, 0.55)
 
-// надо
+// right
 HighlighterLayer.LAST + DIM_LAYER_OFFSET
 ColorUtil.mix(foreground, background, DIM_BALANCE)
 ```
 
-### 6. Комментарии — про «почему», а не про «что»
+### 6. Comments explain "why", not "what"
 
-Что делает код, видно из кода. В комментарий идёт то, чего в коде не видно: почему выбран
-именно такой путь, что сломается при очевидной альтернативе, какая тут засада.
+What the code does is visible in the code. A comment carries what is not visible: why this path
+was chosen, what breaks with the obvious alternative, where the trap is.
 
 ```kotlin
-// бесполезно
-// увеличиваем позицию на два
+// useless
+// increase the position by two
 position += 2
 
-// полезно
-// Не перепрыгиваем через перевод строки — иначе потеряем разметку строк.
+// useful
+// Do not step over the line break, or the line markup is lost.
 ```
 
-Язык комментариев и UI — русский.
+Comments and UI text are written in English.
 
 ---
 
-## Работа над задачей
+## Working on a task
 
-### Сначала план, потом код
+### Plan first, then code
 
-Для нетривиальной задачи — сначала разбор: какие API, какие риски, что проверить в первую
-очередь, какой запасной вариант. План озвучивается до того, как написана первая строка.
+For a non-trivial task, start with the analysis: which APIs, which risks, what to check first,
+what the fallback is. The plan is stated before the first line is written.
 
-Риски перечисляются честно, с пометкой, какой из них главный и как его проверить быстро.
+List the risks honestly, marking which one is the main one and how to check it quickly.
 
-### Проверять, а не заявлять
+### Verify, do not claim
 
-Нельзя писать «готово» про то, что не запускалось. Если что-то проверить невозможно — так и
-сказать прямо, с указанием причины.
+Never write "done" about something that was never run. If something cannot be checked, say so
+plainly and give the reason.
 
-Порядок такой:
+The order is:
 
-1. Логику, которую можно отвязать от фреймворка, — отвязать и покрыть тестами. В этом проекте
-   так сделан `scan/BraceScanner.kt`: ноль зависимостей от IntelliJ, поэтому прогоняется где
-   угодно.
-2. Тесты гонять на том коде, который реально лежит на диске, а не на своей копии.
-3. Если полноценная сборка недоступна — хотя бы скомпилировать и разобрать ошибки по типам,
-   отделив «не хватает jar-ов» от настоящих.
-4. Edge-кейсы покрывать сразу: строковые литералы, комментарии, экранирование, многострочные
-   конструкции, несбалансированный ввод.
+1. Logic that can be detached from the framework gets detached and covered by tests. That is how
+   `scan/BraceScanner.kt` is built in this project: zero IntelliJ dependencies, so it runs
+   anywhere.
+2. Run the tests against the code that is actually on disk, not against your own copy.
+3. When a full build is unavailable, at least compile and sort the errors by kind, separating
+   "missing jars" from the real ones.
+4. Cover edge cases right away: string literals, comments, escaping, multi-line constructs,
+   unbalanced input.
 
-### Не гадать про API
+### Do not guess at APIs
 
-Сигнатуры и поведение библиотечных методов — смотреть в документации или исходниках, а не
-вспоминать. Особенно поведение вроде «создаётся ли регион свёрнутым» — такое вспоминается
-неправильно.
+Look up library signatures and behaviour in the documentation or the sources instead of recalling
+them. Behaviour such as "is the region created already collapsed?" is exactly what gets recalled
+wrong.
 
-### Признавать свои ошибки прямо
+### Admit mistakes directly
 
-Если предыдущий совет оказался неверным, сказать об этом первым предложением и объяснить
-причину. Не размазывать и не заминать.
+If an earlier piece of advice turned out to be wrong, say so in the first sentence and explain
+why. Do not blur it or bury it.
 
 ---
 
-## Про этот проект
+## About this project
 
-Плагин показывает код в стиле Allman, не меняя файл. Как это устроено — в `README.md`.
+The plugin shows code in Allman style without changing the file. How it works is in `README.md`.
 
-Ключевые вещи, которые легко сломать:
+Things that are easy to break:
 
-- **Фолдинг не использовать.** Пробовали — конфликтует с fold-регионами ReSharper на телах
-  методов: `createFoldRegion` возвращает `null`, и перенос молча не срабатывает. Плюс
-  выталкивает каретку во время набора. Сейчас исходный текст остаётся на месте и гасится
-  через `RangeHighlighter`.
-- **Отступы мерить в колонках** через `EditorUtil.getSpaceWidth`, а не измерением строки
-  шрифтом. Иначе табы и пробелы дают разное выравнивание.
-- **Сканер не должен зависеть от IntelliJ.** Всё, что в `scan/`, — чистые функции от текста.
-- **Диалект — только про строковые литералы.** Добавляя язык, смотреть, есть ли у него
-  `"""`-блоки, raw strings, интерполяция. Без этого сканер поедет внутри многострочной строки.
+- **Do not use folding.** It was tried and it clashes with ReSharper's fold regions on method
+  bodies: `createFoldRegion` returns `null` and the move silently does not happen. It also pushes
+  the caret out while typing. The original text now stays in place and is dimmed with a
+  `RangeHighlighter`.
+- **Measure indents in columns** with `EditorUtil.getSpaceWidth`, not by measuring a string with
+  the font. Otherwise tabs and spaces align differently.
+- **The scanner must not depend on IntelliJ.** Everything under `scan/` is a pure function of the
+  text.
+- **A dialect is only about string literals.** When adding a language, check whether it has
+  `"""` blocks, raw strings or interpolation. Without that the scanner runs off inside a
+  multi-line string.
 
-### Версии
+### Versions
 
-Менять только вместе, они связаны:
+Change these together, they are linked:
 
-| | версия | почему |
+| | version | why |
 |---|---|---|
-| Gradle | 9.7.0 | IJ-плагин 2.x требует 9.0+, запуск на JDK 25 — только с 9.1+ |
-| Kotlin | 2.4.20 | полная поддержка Gradle 7.6.3–9.7.0 |
+| Gradle | 9.7.0 | the IJ plugin 2.x needs 9.0+, and running on JDK 25 needs 9.1+ |
+| Kotlin | 2.4.20 | full support for Gradle 7.6.3–9.7.0 |
 | IntelliJ Platform Gradle Plugin | 2.19.0 | |
-| toolchain | JDK 21 | платформа 2026.x работает на JBR 21 |
+| toolchain | JDK 21 | the 2026.x platform runs on JBR 21 |
 
-### Что не коммитить
+### What not to commit
 
-`.intellijPlatform/` — кэш с распакованной IDE и песочницей, около гигабайта. `build/`,
-`.gradle/`, `.kotlin/`, собранные zip. Враппер (`gradle-wrapper.jar`), наоборот, в репозитории
-нужен.
+`.intellijPlatform/` — the cache with the unpacked IDE and the sandbox, about a gigabyte. Also
+`build/`, `.gradle/`, `.kotlin/` and built zips. The wrapper (`gradle-wrapper.jar`), on the other
+hand, does belong in the repository.

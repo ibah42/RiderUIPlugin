@@ -10,11 +10,11 @@ import com.intellij.ui.ColorUtil
 import java.awt.Color
 import java.awt.Font
 
-/** Готовое оформление одной скобки. */
+/** Everything needed to draw one brace. */
 class BraceStyle(
     val attributes: TextAttributes,
 
-    /** null — тень выключена. */
+    /** null means the shadow is disabled. */
     val shadowColor: Color?,
     val shadowOffsetX: Int,
     val shadowOffsetY: Int,
@@ -23,14 +23,15 @@ class BraceStyle(
 )
 
 /**
- * Считает, каким цветом рисовать скобку типа или функции и её подпись.
+ * Works out the colour of a type or function brace and of its label.
  *
- * Базовый цвет берём с самого имени — так подсветка совпадает с тем, что делает
- * ReSharper и текущая цветовая схема, без предположений о ключах. Если на имени
- * цвета нет (бэкенд ещё не ответил), падаем на ключи схемы.
+ * The base colour is sampled from the name itself, so it matches whatever ReSharper and the
+ * current colour scheme actually do, with no assumptions about attribute keys. When the name
+ * carries no colour yet (the backend has not answered), we fall back to the scheme keys.
  *
- * Дальше цвет уводим в сторону от фона: на светлой схеме к чёрному, на тёмной к белому.
- * Затемнять всегда к чёрному нельзя — на Darcula скобка утонула бы в фоне.
+ * The colour is then pushed away from the background: towards black on a light scheme, towards
+ * white on a dark one. Always darkening towards black would sink the brace into a Darcula
+ * background.
  */
 class BraceAccentStyle(
     private val editor: Editor,
@@ -38,7 +39,7 @@ class BraceAccentStyle(
 ) {
     private val cache = HashMap<String, BraceStyle>()
 
-    /** null — этот вид блоков выключен в настройках. */
+    /** null means this kind of block is turned off in the settings. */
     fun styleFor(accent: BraceAccent): BraceStyle? {
         val config = settings.accentFor(accent.kind)
         if (config == null) {
@@ -82,7 +83,7 @@ class BraceAccentStyle(
         return style
     }
 
-    /** Подпись нужна только у закрывающей скобки достаточно длинного блока. */
+    /** Only the closing brace of a long enough block gets a label. */
     fun needsLabel(accent: BraceAccent): Boolean {
         if (accent.isOpening) {
             return false
@@ -148,8 +149,8 @@ class BraceAccentStyle(
     }
 
     /**
-     * Тень ведём от фона к серому, а не к чёрному: серый темнее светлого фона и светлее
-     * тёмного, поэтому одна настройка работает в обеих темах.
+     * The shadow runs from the background towards grey rather than towards black: grey is darker
+     * than a light background and lighter than a dark one, so one setting works in both themes.
      */
     private fun shadowColor(percent: Int): Color {
         val background = editor.colorsScheme.defaultBackground

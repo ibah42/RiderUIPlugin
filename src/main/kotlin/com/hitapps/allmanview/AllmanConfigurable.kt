@@ -19,134 +19,133 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
     override fun createPanel(): DialogPanel {
         val config = AllmanSettings.getInstance().state
         return panel {
-            group("Что переносить") {
+            group("What to move") {
                 row {
-                    checkBox("Показывать { на отдельной строке")
+                    checkBox("Show { on its own line")
                         .bindSelected(config::enabled)
                 }
                 row {
-                    checkBox("Полный Allman: разносить } else { на три строки")
+                    checkBox("Full Allman: split } else { into three lines")
                         .bindSelected(config::fullAllman)
                 }
                 row {
-                    checkBox("Разносить однострочные if / for / foreach / while / using / lock")
+                    checkBox("Split single-line if / for / foreach / while / using / lock")
                         .bindSelected(config::splitStatements)
                         .comment("if (x) return;  →  if (x) ⏎ return;")
                 }
                 row {
-                    checkBox("Разворачивать однострочный блок в скобках")
+                    checkBox("Expand a single-line braced block")
                         .bindSelected(config::expandInlineBlocks)
                         .comment("if (x) { Foo(); }  →  if (x) ⏎ { ⏎ Foo(); ⏎ }")
                 }
                 row {
-                    checkBox("Гасить исходный текст серым")
+                    checkBox("Dim the original text")
                         .bindSelected(config::dimOriginal)
-                        .comment(
-                            "Реальный текст остаётся на месте — он просто приглушается.",
-                        )
+                        .comment("The real text stays where it is and is simply muted.")
                 }
                 row {
-                    checkBox("Цветом подсказок IDE")
+                    checkBox("Use the IDE hint colour")
                         .bindSelected(config::dimUseHintColor)
-                        .comment("Выключи, чтобы задать степень гашения вручную.")
+                        .comment("Turn off to set the dimming strength by hand.")
                 }
-                row("Гасить к фону, %:") {
+                row("Dim towards background, %:") {
                     spinner(0..100, 5).bindIntValue(config::dimPercent)
                 }
             }
 
-            group("Скобки типов: class, struct, interface, enum, record") {
+            group("Type braces: class, struct, interface, enum, record") {
                 row {
-                    checkBox("Выделять")
+                    checkBox("Highlight")
                         .bindSelected(config::accentTypes)
                         .comment(
-                            "Цвет берётся с имени самого типа и уводится в сторону от фона.",
+                            "The colour is sampled from the type name itself and pushed away " +
+                                "from the background.",
                         )
                 }
-                row("К чёрному на светлой схеме, %:") {
+                row("Towards black on a light scheme, %:") {
                     spinner(0..100, 5).bindIntValue(config::typeLightPercent)
                 }
-                row("К белому на тёмной схеме, %:") {
+                row("Towards white on a dark scheme, %:") {
                     spinner(0..100, 5).bindIntValue(config::typeDarkPercent)
                 }
                 row {
-                    checkBox("Жирным").bindSelected(config::typeBold)
-                    checkBox("С тенью").bindSelected(config::typeShadow)
+                    checkBox("Bold").bindSelected(config::typeBold)
+                    checkBox("Shadow").bindSelected(config::typeShadow)
                 }
-                row("Насыщенность тени, %:") {
+                row("Shadow strength, %:") {
                     spinner(0..100, 5).bindIntValue(config::typeShadowPercent)
-                        .comment("0 — тени не видно, 100 — сплошной серый.")
+                        .comment("0 hides the shadow, 100 makes it solid grey.")
                 }
-                row("Сдвиг тени, px:") {
-                    spinner(-4..4, 1).bindIntValue(config::typeShadowOffsetX)
-                    label("по X")
-                    spinner(-4..4, 1).bindIntValue(config::typeShadowOffsetY)
-                    label("по Y")
-                        .comment("X=1, Y=0 даёт псевдо-жирный вместо объёмной тени.")
+                row("Shadow offset, px:") {
+                    spinner(-8..8, 1).bindIntValue(config::typeShadowOffsetX)
+                    label("X")
+                    spinner(-8..8, 1).bindIntValue(config::typeShadowOffsetY)
+                    label("Y")
+                        .comment("X=1, Y=0 gives faux bold instead of depth.")
                 }
                 row {
-                    checkBox("Подписывать конец блока")
+                    checkBox("Label the end of the block")
                         .bindSelected(config::typeLabel)
                         .comment("}  class IosHttpClient")
                 }
-                row("Начиная с длины блока, строк:") {
+                row("From this block length, lines:") {
                     spinner(1..2000, 5).bindIntValue(config::typeLabelMinLines)
                 }
-                row("Подпись к серому, %:") {
+                row("Label towards grey, %:") {
                     spinner(0..100, 5).bindIntValue(config::typeLabelGreyPercent)
                 }
             }
 
-            group("Скобки функций, методов и лямбд") {
+            group("Function braces: methods and lambdas") {
                 row {
-                    checkBox("Выделять")
+                    checkBox("Highlight")
                         .bindSelected(config::accentFunctions)
                         .comment(
-                            "У лямбды своего имени нет — цвет и подпись берутся у метода, " +
-                                "которому она передана, либо у цели присваивания.",
+                            "A lambda has no name of its own, so the colour and the label come " +
+                                "from the method it is passed to, or from the assignment target.",
                         )
                 }
-                row("К чёрному на светлой схеме, %:") {
+                row("Towards black on a light scheme, %:") {
                     spinner(0..100, 5).bindIntValue(config::functionLightPercent)
                 }
-                row("К белому на тёмной схеме, %:") {
+                row("Towards white on a dark scheme, %:") {
                     spinner(0..100, 5).bindIntValue(config::functionDarkPercent)
                 }
                 row {
-                    checkBox("Жирным").bindSelected(config::functionBold)
-                    checkBox("С тенью").bindSelected(config::functionShadow)
+                    checkBox("Bold").bindSelected(config::functionBold)
+                    checkBox("Shadow").bindSelected(config::functionShadow)
                 }
-                row("Насыщенность тени, %:") {
+                row("Shadow strength, %:") {
                     spinner(0..100, 5).bindIntValue(config::functionShadowPercent)
-                        .comment("0 — тени не видно, 100 — сплошной серый.")
+                        .comment("0 hides the shadow, 100 makes it solid grey.")
                 }
-                row("Сдвиг тени, px:") {
-                    spinner(-4..4, 1).bindIntValue(config::functionShadowOffsetX)
-                    label("по X")
-                    spinner(-4..4, 1).bindIntValue(config::functionShadowOffsetY)
-                    label("по Y")
-                        .comment("X=1, Y=0 даёт псевдо-жирный вместо объёмной тени.")
+                row("Shadow offset, px:") {
+                    spinner(-8..8, 1).bindIntValue(config::functionShadowOffsetX)
+                    label("X")
+                    spinner(-8..8, 1).bindIntValue(config::functionShadowOffsetY)
+                    label("Y")
+                        .comment("X=1, Y=0 gives faux bold instead of depth.")
                 }
                 row {
-                    checkBox("Подписывать конец блока")
+                    checkBox("Label the end of the block")
                         .bindSelected(config::functionLabel)
                         .comment("}  fun HandleNativeResult")
                 }
-                row("Начиная с длины блока, строк:") {
+                row("From this block length, lines:") {
                     spinner(1..2000, 5).bindIntValue(config::functionLabelMinLines)
                 }
-                row("Подпись к серому, %:") {
+                row("Label towards grey, %:") {
                     spinner(0..100, 5).bindIntValue(config::functionLabelGreyPercent)
                 }
             }
 
-            group("В каких файлах") {
+            group("Which files") {
                 row {
-                    checkBox("Во всех текстовых файлах")
+                    checkBox("All text files")
                         .bindSelected(config::allFiles)
-                        .comment("Если включено, список расширений ниже игнорируется.")
+                        .comment("When on, the extension list below is ignored.")
                 }
-                row("Расширения:") {
+                row("Extensions:") {
                     textArea()
                         .bindText(
                             { config.extensions ?: Dialects.DEFAULT_EXTENSIONS },
@@ -155,11 +154,11 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         .rows(4)
                         .align(AlignX.FILL)
                         .comment(
-                            "Через запятую, пробел или с новой строки. Точку и звёздочку можно не писать.",
+                            "Separated by comma, space or newline. The dot and the star are optional.",
                         )
                 }
                 row {
-                    button("Вернуть список по умолчанию") {
+                    button("Restore the default list") {
                         config.extensions = Dialects.DEFAULT_EXTENSIONS
                         reset()
                     }
@@ -168,16 +167,16 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
 
             row {
                 comment(
-                    "Разбор строковых литералов подстраивается под язык: C# (@\"\", \"\"\"\"\"\", ${'$'}\"\"), " +
-                        "C/C++ (R\"()\", 1'000'000), JVM и Swift (текстовые блоки \"\"\"\"\"\"), " +
-                        "JS/TS/Go (`шаблоны`). Незнакомое расширение разбирается общими правилами — " +
-                        "их хватает для любого языка с фигурными блоками.",
+                    "String literal parsing adapts to the language: C# (@\"\", \"\"\"\"\"\", ${'$'}\"\"), " +
+                        "C/C++ (R\"()\", 1'000'000), JVM and Swift (text blocks \"\"\"\"\"\"), " +
+                        "JS/TS/Go (`templates`). An unknown extension is parsed by the generic " +
+                        "rules, which are enough for any language with curly blocks.",
                 )
             }
             row {
                 comment(
-                    "Плагин ничего не пишет в файл: фантомная строка — это block inlay, " +
-                        "каретка по ней не ходит. Копирование, поиск и git видят реальный текст.",
+                    "Nothing is written to the file: a phantom line is a block inlay and the " +
+                        "caret never enters it. Copying, search and git see the real text.",
                 )
             }
         }
@@ -198,9 +197,9 @@ class ToggleAllmanAction : AnAction(), Toggleable {
         Toggleable.setSelected(event.presentation, isEnabled)
 
         if (isEnabled) {
-            event.presentation.text = "Скобки: Allman (вкл)"
+            event.presentation.text = "Allman Braces (on)"
         } else {
-            event.presentation.text = "Скобки: Allman (выкл)"
+            event.presentation.text = "Allman Braces (off)"
         }
     }
 

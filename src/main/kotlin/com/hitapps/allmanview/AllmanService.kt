@@ -34,7 +34,7 @@ class AllmanService : Disposable {
         )
     }
 
-    /** Контроллер вешаем всегда — включение и выключение решается уже внутри refresh(). */
+    /** A controller is always attached; whether it draws anything is decided inside refresh(). */
     fun attach(editor: Editor) {
         if (editor.editorKind != EditorKind.MAIN_EDITOR) {
             return
@@ -59,7 +59,7 @@ class AllmanService : Disposable {
     }
 
     override fun dispose() {
-        // Слушатель редакторов и все контроллеры сняты через Disposer.
+        // The editor listener and every controller are unregistered through Disposer.
     }
 
     companion object {
@@ -69,7 +69,7 @@ class AllmanService : Disposable {
     }
 }
 
-/** Поднимает сервис и подхватывает редакторы, уже открытые до старта плагина. */
+/** Starts the service and picks up editors that were already open before the plugin loaded. */
 class AllmanStartup : ProjectActivity {
 
     override suspend fun execute(project: Project) {

@@ -1,48 +1,48 @@
 package com.hitapps.allmanview.scan
 
 /**
- * Диалект для лексера. Нужен только чтобы правильно находить границы строковых литералов —
- * всё остальное у C-подобных языков одинаково.
+ * Lexer dialect. It only exists to find string literal boundaries correctly; everything else
+ * is the same across C-like languages.
  */
 enum class Flavor {
     /** C#: `@"verbatim"`, `"""raw"""`, `$"interp"` */
     CSHARP,
 
-    /** C/C++/шейдеры: `R"delim(raw)delim"`, `1'000'000` */
+    /** C/C++/shaders: `R"delim(raw)delim"`, `1'000'000` */
     CPP,
 
-    /** Java, Kotlin, Scala, Groovy, Swift, Dart: `"""` текстовые блоки */
+    /** Java, Kotlin, Scala, Groovy, Swift, Dart: `"""` text blocks */
     JVM,
 
     /** JS, TS, Go, PHP: `` `template ${literals}` `` */
     WEB,
 
-    /** Всё остальное: только `"..."` и `'...'`. Безопасный дефолт. */
+    /** Everything else: only `"..."` and `'...'`. The safe default. */
     GENERIC,
 }
 
-/** Кому принадлежит блок в фигурных скобках. */
+/** Who a curly block belongs to. */
 enum class BlockKind {
     /** class, struct, interface, enum, record. */
     TYPE,
 
-    /** Объявление метода, конструктора или локальной функции. */
+    /** A method, constructor or local function declaration. */
     FUNCTION,
 
-    /** Всё остальное: if, циклы, лямбды, инициализаторы, свойства. */
+    /** Everything else: if, loops, lambdas, initializers, properties. */
     OTHER,
 }
 
 /**
- * Скобка, которую надо выделить сильнее обычного.
+ * A brace that should stand out more than the rest.
  *
- * @param offset offset самой скобки в документе
- * @param kind чей это блок
- * @param nameOffset offset имени типа или метода — оттуда берём базовый цвет; -1 если не нашли
- * @param nameLength длина этого имени
- * @param keyword что писать в подписи: `class`, `struct`, `fun`
- * @param isOpening открывающая это скобка или закрывающая
- * @param spannedLines сколько строк занимает блок; у открывающей скобки всегда 0
+ * @param offset offset of the brace itself in the document
+ * @param kind which kind of block it belongs to
+ * @param nameOffset offset of the type or method name the base colour comes from; -1 if none
+ * @param nameLength length of that name
+ * @param keyword what to print in the label: `class`, `struct`, `fun`
+ * @param isOpening whether this is the opening or the closing brace
+ * @param spannedLines how many lines the block covers; always 0 for the opening brace
  */
 data class BraceAccent(
     val offset: Int,
@@ -54,35 +54,35 @@ data class BraceAccent(
     val spannedLines: Int,
 )
 
-/** Что именно разносить. */
+/** What exactly to split. */
 data class ScanOptions(
-    /** Разносить `} else {` на три строки, а не только висящую `{`. */
+    /** Split `} else {` into three lines, not just the hanging `{`. */
     val fullAllman: Boolean = true,
 
-    /** Разносить `if (x) return;` на две строки. */
+    /** Split `if (x) return;` into two lines. */
     val splitStatements: Boolean = true,
 
-    /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
+    /** Expand `if (x) { Foo(); }` into four lines. */
     val expandInlineBlocks: Boolean = true,
 
-    /** Помечать скобки типов: class, struct, interface, enum, record. */
+    /** Mark type braces: class, struct, interface, enum, record. */
     val accentTypes: Boolean = true,
 
-    /** Помечать скобки функций, методов, конструкторов и лямбд. */
+    /** Mark braces of functions, methods, constructors and lambdas. */
     val accentFunctions: Boolean = true,
 )
 
 /**
- * Одна фантомная строка.
+ * A single phantom line.
  *
- * Текст — всегда непрерывный кусок документа, поэтому рендерер может забрать для него
- * настоящую подсветку: символ с индексом `i` лежит в документе на `sourceOffset + i`.
+ * The text is always a contiguous slice of the document, so the renderer can fetch its real
+ * highlighting: the character at index `i` lives at `sourceOffset + i` in the document.
  *
- * @param text что нарисовать
- * @param sourceOffset offset этого текста в документе
- * @param extraIndentLevels на сколько уровней глубже отступа строки-владельца.
- *   Именно уровней, а не пробелов: ширину уровня знает только редактор, а таб
- *   внутри строки `Graphics.drawString` не разворачивает и отступ бы пропал.
+ * @param text what to draw
+ * @param sourceOffset offset of that text in the document
+ * @param extraIndentLevels how many levels deeper than the owner line's indent.
+ *   Levels rather than spaces: only the editor knows how wide a level is, and
+ *   `Graphics.drawString` does not expand a tab, so the indent would vanish.
  */
 data class PhantomLine(
     val text: String,
@@ -91,16 +91,16 @@ data class PhantomLine(
 )
 
 /**
- * Одно место, где мы визуально ломаем строку на Allman.
+ * One place where a line is visually broken into Allman style.
  *
- * Исходный текст не прячется — он остаётся на месте и гасится в серый,
- * а под строкой дорисовывается фантом обычным цветом.
+ * The original text is not hidden: it stays where it is and is dimmed to grey, while the
+ * phantom is drawn underneath in the normal colour.
  *
- * @param dimStart offset первого гасимого символа
- * @param dimEnd offset конца гасимого куска (exclusive)
- * @param anchorOffset offset конца строки-владельца — якорь для block inlay
- * @param indent ведущий whitespace строки-владельца, как есть (табы/пробелы)
- * @param phantomLines что рисуем фантомными строками, сверху вниз
+ * @param dimStart offset of the first dimmed character
+ * @param dimEnd offset just past the dimmed slice (exclusive)
+ * @param anchorOffset offset of the owner line's end, the anchor for the block inlay
+ * @param indent leading whitespace of the owner line, verbatim (tabs/spaces)
+ * @param phantomLines what to draw as phantom lines, top to bottom
  */
 data class PhantomSite(
     val dimStart: Int,
@@ -109,43 +109,43 @@ data class PhantomSite(
     val indent: String,
     val phantomLines: List<PhantomLine>,
 ) {
-    /** Только тексты фантомов — удобно в тестах и логах. */
+    /** Phantom texts only, handy in tests and logs. */
     val phantomTexts: List<String>
         get() = phantomLines.map { it.text }
 }
 
-/** Результат одного прохода по документу. */
+/** The result of one pass over the document. */
 data class ScanResult(
     val sites: List<PhantomSite>,
     val accents: List<BraceAccent>,
 )
 
-/** Состояние лексера. */
+/** Lexer state. */
 private enum class LexerState {
     CODE,
     LINE_COMMENT,
     BLOCK_COMMENT,
 
-    /** `"..."` с обратным слешем как экранированием. */
+    /** `"..."` with backslash escapes. */
     STRING,
 
-    /** `'x'` — символьный литерал. */
+    /** `'x'`, a character literal. */
     CHARACTER,
 
-    /** C#: `@"..."`, где кавычка экранируется удвоением. */
+    /** C#: `@"..."`, where a quote is escaped by doubling it. */
     VERBATIM_STRING,
 
-    /** `"""..."""` — C# raw strings, текстовые блоки Java/Kotlin/Swift. */
+    /** `"""..."""`: C# raw strings and Java/Kotlin/Swift text blocks. */
     TRIPLE_QUOTED_STRING,
 
     /** C++: `R"delim(...)delim"`. */
     CPP_RAW_STRING,
 
-    /** `` `...` `` с дырками `${...}`. */
+    /** `` `...` `` with `${...}` holes. */
     BACKTICK_TEMPLATE,
 }
 
-/** Строковый контекст, в который надо вернуться, когда закроется дырка интерполяции. */
+/** The string context to return to once an interpolation hole closes. */
 private class InterpolationFrame(
     val lexerState: LexerState,
     val interpolationDollars: Int,
@@ -154,7 +154,7 @@ private class InterpolationFrame(
     val holeBraceDepth: Int,
 )
 
-/** Открытый блок в стеке вложенности. */
+/** An open block on the nesting stack. */
 private class OpenBlock(
     val kind: BlockKind,
     val nameOffset: Int,
@@ -163,7 +163,7 @@ private class OpenBlock(
     val openLineNumber: Int,
 )
 
-/** Разобранный префикс строкового литерала: `$`, `@`, `R`. */
+/** A parsed string literal prefix: `$`, `@`, `R`. */
 private class LiteralPrefix(
     val dollars: Int,
     val isVerbatim: Boolean,
@@ -171,37 +171,36 @@ private class LiteralPrefix(
 )
 
 /**
- * Заголовок управляющей конструкции в начале строки: `if (x)`, `foreach (var a in b)`,
+ * The header of a control construct at the start of a line: `if (x)`, `foreach (var a in b)`,
  * `else`, `} catch (E e)`.
  */
 private class LineHeader(
-    /** offset начала заголовка — уже после ведущей `}`, если она есть. */
+    /** Offset where the header starts, already past a leading `}` if there is one. */
     val headerStart: Int,
 
-    /** offset сразу после заголовка. */
+    /** Offset just past the header. */
     val headerEnd: Int,
 
-    /** Строка начинается с `}`, которую надо оставить на своём месте. */
+    /** The line starts with a `}` that must stay where it is. */
     val hasLeadingCloseBrace: Boolean,
 
-    /** Первое ключевое слово заголовка: `if`, `else`, `catch`, `while`. */
+    /** The header's first keyword: `if`, `else`, `catch`, `while`. */
     val firstKeyword: String,
 )
 
 /**
- * Линейный скан документа. Никаких зависимостей от IntelliJ — чистая функция от текста.
+ * A linear scan of the document. No IntelliJ dependencies: a pure function of the text.
  *
- * Однострочные состояния (строка в кавычках, символьный литерал, `//`) принудительно
- * сбрасываются на переводе строки: это ограничивает возможный рассинхрон ровно одной
- * строкой, а не всем хвостом файла.
+ * Single-line states (a quoted string, a character literal, `//`) are force-reset at a newline.
+ * That bounds any possible desync to exactly one line instead of the rest of the file.
  */
 class BraceScanner(
     private val text: CharSequence,
     private val flavor: Flavor,
     private val options: ScanOptions = ScanOptions(),
 ) {
-    // Возможности диалекта. Держим флагами, а не сравнениями с enum по всему коду:
-    // языков много, а различаются они ровно тем, как устроены строковые литералы.
+    // Dialect capabilities, kept as flags rather than enum comparisons all over the code:
+    // there are many languages, and they differ in exactly one thing, their string literals.
     private val supportsVerbatimStrings = flavor == Flavor.CSHARP
     private val supportsTripleQuotedStrings = flavor == Flavor.CSHARP || flavor == Flavor.JVM
     private val supportsCppRawStrings = flavor == Flavor.CPP
@@ -211,44 +210,44 @@ class BraceScanner(
     private val foundSites = ArrayList<PhantomSite>()
     private val foundAccents = ArrayList<BraceAccent>()
 
-    /** Стек открытых `{`: по нему закрывающая скобка узнаёт, чей блок она закрывает. */
+    /** Stack of open `{`: a closing brace uses it to learn whose block it closes. */
     private val blockStack = ArrayDeque<OpenBlock>()
 
     private val textLength = text.length
 
-    /** Курсор по документу. */
+    /** Cursor over the document. */
     private var position = 0
 
-    // --- состояние текущей строки ---
+    // --- current line state ---
 
     private var lineStartOffset = 0
     private var lineNumber = 0
 
-    /** Строка начинается в коде, а не внутри многострочного литерала или комментария. */
+    /** The line starts in code, not inside a multi-line literal or comment. */
     private var lineStartsInCode = true
 
     private var firstCodeOffset = -1
     private var lastCodeOffset = -1
 
     /**
-     * Offsets круглых скобок и фигурных скобок, закрывшихся на верхнем уровне этой строки.
-     * Позволяют резать строку по offset-ам, а не разбором подстроки: подстрока может
-     * содержать литерал со скобками внутри, а эти offsets лексер уже отфильтровал.
+     * Offsets of parentheses and braces closed at the top level of this line.
+     * They let the line be cut by offset instead of by parsing a substring: a substring can
+     * contain a literal with brackets inside, while these offsets are already lexer-filtered.
      */
     private val lineParenCloseOffsets = ArrayList<Int>()
     private val lineBraceOpenOffsets = ArrayList<Int>()
     private val lineBraceCloseOffsets = ArrayList<Int>()
 
-    // --- многострочные конструкции ---
+    // --- multi-line constructs ---
 
     /**
-     * Глубина `(` и `[`. Нужна, чтобы у многострочной сигнатуры
+     * Depth of `(` and `[`. Needed so that for a multi-line signature
      * ```
      * void Foo(
      *     int a,
      *     int b) {
      * ```
-     * фантомная скобка встала под `void`, а не под `int b`.
+     * the phantom brace lands under `void` rather than under `int b`.
      */
     private var bracketDepth = 0
     private var bracketDepthAtLineStart = 0
@@ -256,30 +255,30 @@ class BraceScanner(
     private var statementLineNumber = 0
 
     /**
-     * Границы предыдущей строки с кодом.
+     * Bounds of the previous line that held code.
      *
-     * Нужны, когда `{` стоит на своей строке — то есть код уже в Allman. Заголовок
-     * блока тогда лежит на строке выше, и без этого класс и метод не распознать.
+     * Needed when the `{` sits on its own line, that is, when the code is already Allman. The
+     * block header is then on the line above, and without this a class or method is not found.
      */
     private var previousCodeStart = -1
     private var previousCodeEnd = -1
 
-    // --- состояние лексера ---
+    // --- lexer state ---
 
     private var lexerState = LexerState.CODE
 
-    /** Сколько `$` стоит перед кавычкой: `$"..."` → 1, `$$"""..."""` → 2, не интерполяция → 0. */
+    /** How many `$` precede the quote: `$"..."` is 1, `$$"""..."""` is 2, no interpolation 0. */
     private var interpolationDollars = 0
 
-    /** Длина открывающей серии кавычек для [LexerState.TRIPLE_QUOTED_STRING]. */
+    /** Length of the opening quote run for [LexerState.TRIPLE_QUOTED_STRING]. */
     private var rawQuoteCount = 0
 
-    /** Разделитель из `R"delim(`. */
+    /** The delimiter from `R"delim(`. */
     private var cppRawDelimiter = ""
 
     private val interpolationStack = ArrayDeque<InterpolationFrame>()
 
-    /** Глубина `{}` внутри текущей дырки интерполяции. */
+    /** Depth of `{}` inside the current interpolation hole. */
     private var holeBraceDepth = 0
 
     fun scan(): ScanResult {
@@ -306,7 +305,7 @@ class BraceScanner(
         return ScanResult(foundSites, foundAccents)
     }
 
-    // ---------------------------------------------------------------- состояния лексера
+    // ------------------------------------------------------------------- lexer states
 
     private fun stepCode(current: Char) {
         when (current) {
@@ -437,7 +436,7 @@ class BraceScanner(
     private fun stepVerbatimString(current: Char) {
         when (current) {
             '"' -> {
-                // в verbatim-строке кавычка экранируется удвоением, а не слешем
+                // in a verbatim string a quote is escaped by doubling, not by a backslash
                 if (charRelative(1) == '"') {
                     position += 2
                 } else {
@@ -508,7 +507,7 @@ class BraceScanner(
         }
     }
 
-    /** `{` внутри строки: либо открывает дырку интерполяции, либо просто содержимое. */
+    /** A `{` inside a string either opens an interpolation hole or is plain content. */
     private fun stepInterpolationBraceOrSkip() {
         if (interpolationDollars > 0) {
             handleInterpolationBrace()
@@ -517,7 +516,7 @@ class BraceScanner(
         }
     }
 
-    // ---------------------------------------------------------------- открытие литералов
+    // -------------------------------------------------------------- opening literals
 
     private fun openDoubleQuotedLiteral() {
         markCode(position)
@@ -537,7 +536,7 @@ class BraceScanner(
             return
         }
         if (quoteRun == 2) {
-            // пустой литерал "" или @""
+            // an empty literal, "" or @""
             position += 2
             return
         }
@@ -551,7 +550,7 @@ class BraceScanner(
         position++
     }
 
-    /** Префикс вплотную к кавычке: `$`, `@`, `R`. За предыдущую строку не заезжаем. */
+    /** The prefix glued to the quote: `$`, `@`, `R`. Never reaches onto the previous line. */
     private fun readLiteralPrefix(): LiteralPrefix {
         var dollars = 0
         var isVerbatim = false
@@ -598,7 +597,7 @@ class BraceScanner(
             return
         }
 
-        // на raw string не похоже — считаем обычной строкой
+        // does not look like a raw string, so treat it as an ordinary one
         lexerState = LexerState.STRING
         interpolationDollars = 0
         position++
@@ -614,7 +613,7 @@ class BraceScanner(
         position++
     }
 
-    /** C++: в `1'000'000` апостроф разделяет разряды, а не открывает символьный литерал. */
+    /** C++: in `1'000'000` the apostrophe is a digit separator, not a character literal. */
     private fun isDigitSeparator(): Boolean {
         if (!supportsDigitSeparatorQuote) {
             return false
@@ -634,12 +633,12 @@ class BraceScanner(
         position++
     }
 
-    // ---------------------------------------------------------------- интерполяция
+    // ----------------------------------------------------------------- interpolation
 
     private fun handleInterpolationBrace() {
         val braceRun = countRepeated('{', position)
 
-        // при одном $ последовательность {{ — это экранированная скобка, а не дырка
+        // with a single $ the sequence {{ is an escaped brace, not a hole
         if (interpolationDollars in 1..(braceRun / 2)) {
             position += 2 * interpolationDollars
             return
@@ -680,8 +679,8 @@ class BraceScanner(
     }
 
     /**
-     * Закрывает текущий литерал. Если мы внутри дырки интерполяции, стек не трогаем:
-     * вернуться в объемлющую строку должна закрывающая `}`, а не эта кавычка.
+     * Closes the current literal. Inside an interpolation hole the stack is left alone:
+     * returning to the enclosing string is the closing `}`'s job, not this quote's.
      */
     private fun closeStringLiteral() {
         lexerState = LexerState.CODE
@@ -690,7 +689,7 @@ class BraceScanner(
         cppRawDelimiter = ""
     }
 
-    // ---------------------------------------------------------------- построчный разбор
+    // ------------------------------------------------------------- per-line analysis
 
     private fun finishLine(lineEndOffset: Int) {
         emitLine(lineEndOffset)
@@ -705,7 +704,7 @@ class BraceScanner(
             lexerState == LexerState.CHARACTER
 
         if (isUnterminatedSingleLine) {
-            // рассинхрон дальше не тащим
+            // do not carry a desync any further
             lexerState = LexerState.CODE
             interpolationDollars = 0
         }
@@ -749,7 +748,7 @@ class BraceScanner(
 
     private fun emitHangingBrace(braceOffset: Int, lineEndOffset: Int, indent: String) {
         if (braceOffset <= firstCodeOffset) {
-            // `{` и есть первый код-символ — строка уже в Allman
+            // the `{` is the first code character, so the line is already Allman
             return
         }
 
@@ -757,7 +756,7 @@ class BraceScanner(
         if (header != null && movesLeadingCloseBrace(header)) {
             val headerText = text.subSequence(header.headerStart, braceOffset).toString().trimEnd()
             if (headerText.isNotEmpty()) {
-                // гасим всё, что уехало вниз: " else {"
+                // dim everything that moved down: " else {"
                 addSite(
                     dimStart = firstCodeOffset + 1,
                     dimEnd = braceOffset + 1,
@@ -777,7 +776,7 @@ class BraceScanner(
             return
         }
 
-        // гасим только саму скобку — пробелы перед ней и так не видно
+        // dim only the brace itself; the spaces before it are invisible anyway
         addSite(
             dimStart = braceOffset,
             dimEnd = braceOffset + 1,
@@ -788,10 +787,10 @@ class BraceScanner(
     }
 
     /**
-     * `if (x) { Foo(); }` → заголовок остаётся, а блок разворачивается на три строки.
+     * `if (x) { Foo(); }`: the header stays and the block expands into three lines.
      *
-     * Заголовок обязан быть управляющей конструкцией, иначе под правило попало бы
-     * автосвойство `public int X { get; set; }`, которое разносить не надо.
+     * The header must be a control construct, otherwise the auto-property
+     * `public int X { get; set; }` would match the rule, and it must not be split.
      */
     private fun emitInlineBlock(lineEndOffset: Int, indent: String) {
         val header = parseLineHeader()
@@ -852,8 +851,8 @@ class BraceScanner(
     }
 
     /**
-     * `if (x) return;` → заголовок остаётся, инструкция уезжает вниз с отступом.
-     * Сюда же попадает `} else` без инструкции — он разносится по правилам полного Allman.
+     * `if (x) return;`: the header stays and the statement moves down one indent level.
+     * A bare `} else` lands here too and is split according to the full Allman rules.
      */
     private fun emitStatementSplit(lineEndOffset: Int, indent: String) {
         val header = parseLineHeader()
@@ -864,7 +863,7 @@ class BraceScanner(
         val statementStart = skipSpacesFrom(header.headerEnd)
         val statementText = text.subSequence(statementStart, lastCodeOffset + 1).toString().trimEnd()
 
-        // пустая инструкция `while (x);` и голое `{` — не наш случай
+        // an empty statement `while (x);` and a bare `{` are not our case
         val hasStatement = options.splitStatements &&
             statementText.isNotEmpty() &&
             statementText != ";" &&
@@ -913,10 +912,10 @@ class BraceScanner(
     }
 
     /**
-     * Разбирает заголовок управляющей конструкции в начале строки.
+     * Parses the header of a control construct at the start of a line.
      *
-     * Режем по offset-ам, которые проставил лексер, а не по подстроке: в `if (Check(")")) Foo();`
-     * наивный поиск закрывающей скобки нашёл бы её внутри литерала.
+     * The cut uses offsets recorded by the lexer rather than a substring: in
+     * `if (Check(")")) Foo();` a naive search would find the closing paren inside the literal.
      */
     private fun parseLineHeader(): LineHeader? {
         var cursor = firstCodeOffset
@@ -952,7 +951,7 @@ class BraceScanner(
                 break
             }
             if (keyword in KEYWORDS_REQUIRING_PARENS) {
-                // `using System.Text;` — директива, а не конструкция со скобками
+                // `using System.Text;` is a directive, not a construct with parentheses
                 return null
             }
             if (keyword != "else") {
@@ -981,9 +980,9 @@ class BraceScanner(
     }
 
     /**
-     * Отступ для фантомной строки. Если строка — продолжение незакрытой `(` или `[`,
-     * берём отступ у строки, с которой конструкция началась. Ограничение по длине —
-     * страховка от рассинхрона на несбалансированных скобках.
+     * Indent for the phantom line. When the line continues an unclosed `(` or `[`, the indent
+     * is taken from the line the construct started on. The length limit guards against a desync
+     * caused by unbalanced brackets.
      */
     private fun readIndent(): String {
         val isContinuation = bracketDepthAtLineStart > 0 &&
@@ -1019,7 +1018,7 @@ class BraceScanner(
         foundSites.add(PhantomSite(dimStart, dimEnd, anchorOffset, indent, phantomLines))
     }
 
-    // ------------------------------------------------- принадлежность фигурных скобок
+    // ------------------------------------------------------- curly brace ownership
 
     private fun openBlock(braceOffset: Int) {
         val block = classifyBlock(braceOffset)
@@ -1029,7 +1028,7 @@ class BraceScanner(
 
     private fun closeBlock(braceOffset: Int) {
         if (blockStack.isEmpty()) {
-            // файл в процессе набора — скобки не сбалансированы
+            // the file is mid-edit, so braces are unbalanced
             return
         }
         val block = blockStack.removeLast()
@@ -1078,7 +1077,7 @@ class BraceScanner(
         var headerEnd = braceOffset
 
         if (firstCodeOffset == braceOffset) {
-            // скобка — первый код на строке, значит код уже в Allman и заголовок выше
+            // the brace is the first code on the line, so the code is Allman and the header is above
             if (previousCodeEnd <= 0 || previousCodeEnd > braceOffset) {
                 return otherBlock()
             }
@@ -1117,10 +1116,10 @@ class BraceScanner(
     }
 
     /**
-     * Заголовок без литералов и без констрейнтов.
+     * The header without literals and without constraints.
      *
-     * Констрейнты режем до классификации, иначе `void Bind<T>(T v) where T : class {`
-     * увидит слово `class` и сойдёт за объявление типа.
+     * Constraints are cut before classification, otherwise `void Bind<T>(T v) where T : class {`
+     * would see the word `class` and pass as a type declaration.
      */
     private fun declarationPart(header: String): String {
         val withoutLiterals = header.substring(0, quoteLimit(header))
@@ -1132,12 +1131,11 @@ class BraceScanner(
     }
 
     /**
-     * Где начинается заголовок этой скобки.
+     * Where this brace's header begins.
      *
-     * Обычно это начало строки, с которой началась конструкция — так многострочная
-     * сигнатура разбирается целиком. Но если на строке уже были скобки, заголовок
-     * начинается после последней из них: иначе в `class A { void M() {` вторая скобка
-     * увидела бы слово `class` и сошла за тип.
+     * Usually the start of the line the construct began on, so a multi-line signature is read
+     * whole. But when the line already had braces, the header starts after the last of them:
+     * otherwise in `class A { void M() {` the second brace would see `class` and pass as a type.
      */
     private fun headerStartFor(braceOffset: Int): Int {
         var start = statementLineStartOffset
@@ -1161,7 +1159,7 @@ class BraceScanner(
         }
         val keyword = keywordAt(header, keywordIndex, TYPE_KEYWORDS) ?: return null
 
-        // `record struct Point` — ключевых слов может быть несколько подряд
+        // `record struct Point`: several keywords can follow one another
         var cursor = keywordIndex
         while (true) {
             val next = keywordAt(header, cursor, TYPE_KEYWORDS)
@@ -1176,7 +1174,7 @@ class BraceScanner(
             return namedBlock(BlockKind.TYPE, keyword, header, headerStart, nameIndex)
         }
 
-        // Go: `type Point struct {` — имя стоит перед ключевым словом
+        // Go: in `type Point struct {` the name comes before the keyword
         val beforeIndex = identifierStartBefore(header, keywordIndex)
         return namedBlock(BlockKind.TYPE, keyword, header, headerStart, beforeIndex)
     }
@@ -1184,8 +1182,8 @@ class BraceScanner(
     private fun classifyFunctionHeader(header: String, headerStart: Int): OpenBlock {
         val trimmed = header.trimEnd()
 
-        // лямбду проверяем первой: `return items.Select(x => {` — это тело лямбды,
-        // хотя строка и начинается со слова return
+        // check the lambda first: `return items.Select(x => {` is a lambda body,
+        // even though the line starts with the word return
         if (trimmed.endsWith("=>") || endsWithWord(trimmed, "delegate")) {
             return lambdaBlock(header, headerStart)
         }
@@ -1199,14 +1197,14 @@ class BraceScanner(
         }
         val firstWord = identifierAt(header, firstWordIndex)
         if (firstWord == "delegate") {
-            // анонимный метод со списком параметров: `delegate(int x) {`
+            // an anonymous method with a parameter list: `delegate(int x) {`
             return lambdaBlock(header, headerStart)
         }
         if (firstWord in NON_DECLARATION_KEYWORDS) {
             return otherBlock()
         }
         if (containsAssignment(header)) {
-            // `var a = new Foo() {` — инициализатор, а не объявление
+            // `var a = new Foo() {` is an initializer, not a declaration
             return otherBlock()
         }
 
@@ -1224,15 +1222,15 @@ class BraceScanner(
     }
 
     /**
-     * Лямбда или анонимный метод.
+     * A lambda or an anonymous method.
      *
-     * Собственного имени у них нет, поэтому берём ближайшее осмысленное:
-     * цель присваивания (`Action handler = () => {`) либо метод, которому лямбда
-     * передаётся (`Run(() => {`). Оттуда же возьмётся цвет.
+     * They have no name of their own, so the nearest meaningful one is used: the assignment
+     * target (`Action handler = () => {`) or the method the lambda is passed to
+     * (`Run(() => {`). The colour comes from the same place.
      */
     private fun lambdaBlock(header: String, headerStart: Int): OpenBlock {
-        // Сначала вызов, которому лямбда передана: в `var r = items.Select(y => {`
-        // осмысленное имя — Select, а не переменная слева.
+        // The call the lambda is passed to comes first: in `var r = items.Select(y => {`
+        // the meaningful name is Select, not the variable on the left.
         val openIndex = lastUnclosedParen(header)
         if (openIndex >= 0) {
             val nameEnd = skipGenericsBefore(header, openIndex)
@@ -1242,7 +1240,7 @@ class BraceScanner(
             }
         }
 
-        // Скобок нет — значит лямбда просто присваивается: `Action handler = () => {`
+        // No parentheses means the lambda is simply assigned: `Action handler = () => {`
         val assignIndex = assignmentIndex(header)
         if (assignIndex >= 0) {
             val nameIndex = identifierStartBefore(header, assignIndex)
@@ -1269,7 +1267,7 @@ class BraceScanner(
         return opened[opened.size - 1]
     }
 
-    /** Всё после первой кавычки в заголовке разбирать нельзя — там литерал. */
+    /** Nothing after the first quote in a header can be parsed; that is a literal. */
     private fun quoteLimit(header: String): Int {
         val quoteIndex = header.indexOf('"')
         if (quoteIndex < 0) {
@@ -1313,7 +1311,7 @@ class BraceScanner(
         return before == null || !isIdentifierChar(before)
     }
 
-    /** `Foo<T>(` — имя стоит до генерик-параметров, поэтому отматываем `<...>`. */
+    /** In `Foo<T>(` the name precedes the generic parameters, so `<...>` is rewound. */
     private fun skipGenericsBefore(header: String, parenIndex: Int): Int {
         var cursor = parenIndex - 1
         while (cursor >= 0 && header[cursor].isWhitespace()) {
@@ -1339,7 +1337,7 @@ class BraceScanner(
         return parenIndex
     }
 
-    /** Index присваивания `=`, но не `==`, `=>`, `<=`, `>=`, `!=`. */
+    /** Index of an assignment `=`, but not of `==`, `=>`, `<=`, `>=`, `!=`. */
     private fun assignmentIndex(header: String): Int {
         for (index in header.indices) {
             if (header[index] != '=') {
@@ -1412,7 +1410,7 @@ class BraceScanner(
         return character.isLetter() || character == '_'
     }
 
-    // ---------------------------------------------------------------- мелкие помощники
+    // ------------------------------------------------------------------ small helpers
 
     private fun markCode(offset: Int) {
         if (firstCodeOffset < 0) {
@@ -1435,7 +1433,7 @@ class BraceScanner(
         }
     }
 
-    /** Ведущая `}` строки в баланс блока не входит — считаем только то, что после заголовка. */
+    /** A leading `}` is not part of the block balance; only count what follows the header. */
     private fun countOffsetsAtOrAfter(offsets: List<Int>, from: Int): Int {
         var count = 0
         for (offset in offsets) {
@@ -1462,7 +1460,7 @@ class BraceScanner(
         return -1
     }
 
-    /** Не перепрыгиваем через перевод строки — иначе потеряем разметку строк. */
+    /** Never jump over a newline, or the line bookkeeping is lost. */
     private fun advanceOverEscape() {
         if (position + 1 < textLength && text[position + 1] != '\n') {
             position += 2
@@ -1505,7 +1503,7 @@ class BraceScanner(
     companion object {
         private val SPLIT_KEYWORDS = setOf("else", "catch", "finally")
 
-        /** Что пишем в подписи для функций: без типа возврата, просто `fun Name`. */
+        /** What the label says for functions: no return type, just `fun Name`. */
         private const val FUNCTION_KEYWORD = "fun"
 
         private val TYPE_KEYWORDS = setOf("class", "struct", "interface", "enum", "record")
@@ -1513,8 +1511,8 @@ class BraceScanner(
         private val WHERE_KEYWORDS = setOf("where")
 
         /**
-         * С этих слов начинается что угодно, только не объявление функции.
-         * Без них `return new Foo() {` и `switch (x) {` попали бы в функции.
+         * These words start anything but a function declaration.
+         * Without them `return new Foo() {` and `switch (x) {` would count as functions.
          */
         private val NON_DECLARATION_KEYWORDS = setOf(
             "if", "for", "foreach", "while", "switch", "using", "lock", "fixed",
@@ -1522,29 +1520,29 @@ class BraceScanner(
             "await", "new", "unsafe", "checked", "unchecked",
         )
 
-        /** Ключевые слова, с которых может начинаться разносимая конструкция. */
+        /** Keywords a splittable construct can start with. */
         private val HEADER_KEYWORDS = listOf(
             "foreach", "finally", "while", "catch", "fixed", "using", "lock", "else", "for", "if",
         )
 
         /**
-         * Без круглых скобок эти слова означают что-то другое:
-         * `using System;` — директива, `for` без скобок не бывает вовсе.
+         * Without parentheses these words mean something else:
+         * `using System;` is a directive, and `for` never appears without them.
          */
         private val KEYWORDS_REQUIRING_PARENS = setOf(
             "if", "for", "foreach", "while", "using", "lock", "fixed",
         )
 
-        /** Насколько далеко назад разрешено искать начало многострочной конструкции. */
+        /** How far back the start of a multi-line construct may be searched for. */
         private const val MAX_CONTINUATION_LINES = 40
 
-        /** По стандарту разделитель в `R"delim(` не длиннее 16 символов. */
+        /** By the standard the delimiter in `R"delim(` is at most 16 characters. */
         private const val MAX_CPP_RAW_DELIMITER = 16
 
-        /** Сколько скобок на строке запоминаем; дальше строка явно не про нас. */
+        /** How many brackets per line are remembered; beyond that the line is not ours. */
         private const val MAX_TRACKED_OFFSETS = 16
 
-        /** Возвращается вместо символа за границами документа. */
+        /** Returned instead of a character outside the document. */
         private val NO_CHARACTER = Char.MIN_VALUE
     }
 }

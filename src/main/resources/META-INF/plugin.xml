@@ -4,11 +4,11 @@
     <vendor email="ivan.voinyi@hitapps.com">Hitapps</vendor>
 
     <description><![CDATA[
-    Показывает код в стиле Allman, не меняя файл.<br/><br/>
-    Если строка кончается на <code>{</code>, исходная скобка прячется фолдингом с пустым
-    плейсхолдером, а под строкой рисуется фантомная строка со скобкой на нужном отступе.
-    То же самое для <code>} else {</code>, <code>} catch {</code>, <code>} finally {</code>.<br/><br/>
-    В файл ничего не пишется: копирование, поиск, компилятор и git видят реальный текст.
+    Shows your code in Allman style without changing the file.<br/><br/>
+    When a line ends with <code>{</code>, the real brace stays where it is and is simply dimmed,
+    while a phantom line with the brace is drawn underneath at the right indent.
+    The same happens for <code>} else {</code>, <code>} catch {</code>, <code>} finally {</code>.<br/><br/>
+    Nothing is written to the file: copying, search, the compiler and git all see the real text.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -25,8 +25,8 @@
     <actions>
         <action id="AllmanView.Toggle"
                 class="com.hitapps.allmanview.ToggleAllmanAction"
-                text="Скобки: Allman"
-                description="Включить/выключить визуальный перенос открывающих скобок">
+                text="Allman Braces"
+                description="Turn the visual move of opening braces on or off">
             <add-to-group group-id="ViewMenu" anchor="last"/>
         </action>
     </actions>

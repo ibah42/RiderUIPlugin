@@ -13,10 +13,10 @@ import java.awt.Graphics2D
 import java.awt.Rectangle
 
 /**
- * Подпись после закрывающей скобки длинного блока: `class IosHttpClient`, `fun Update`.
+ * The label after the closing brace of a long block: `class IosHttpClient`, `fun Update`.
  *
- * Inline-инлей, а не текст: в файл ничего не пишется. Стоит сразу после `}`, поэтому
- * ничего не сдвигает — правее скобки на строке обычно пусто.
+ * An inline inlay rather than text, so nothing is written to the file. It sits right after the
+ * `}`, where the rest of the line is usually empty, so it shifts nothing.
  */
 class BlockLabelRenderer(
     private val labelText: String,
@@ -52,7 +52,7 @@ class BlockLabelRenderer(
     }
 
     private companion object {
-        /** Отступ от скобки, чтобы подпись не липла к `}`. */
+        /** Gap after the brace so the label does not stick to `}`. */
         const val LEADING_SPACES = 2
     }
 }

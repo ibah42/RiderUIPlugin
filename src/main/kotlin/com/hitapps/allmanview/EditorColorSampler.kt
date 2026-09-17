@@ -11,7 +11,7 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import java.awt.Color
 import java.awt.Font
 
-/** Цвет и начертание для куска текста, посимвольно. */
+/** Colour and font style for a piece of text, character by character. */
 class TextStyleRun(
     val colors: Array<Color?>,
     val fontStyles: IntArray,
@@ -51,14 +51,13 @@ class TextStyleRun(
 }
 
 /**
- * Достаёт настоящую подсветку редактора для произвольного куска документа.
+ * Reads the editor's real highlighting for an arbitrary slice of the document.
  *
- * Источников два, в порядке приоритета: лексер редактора и разметка документа.
- * В Rider подсветка C# приходит из бэкенда ReSharper именно разметкой, поэтому
- * одного лексера здесь мало.
+ * Two sources, in priority order: the editor's lexer and the document markup. In Rider the C#
+ * highlighting arrives from the ReSharper backend as markup, so the lexer alone is not enough.
  *
- * Читаем только `DocumentMarkupModel` и не трогаем `editor.markupModel` — там лежат
- * наши собственные гасящие хайлайтеры, и фантом посерел бы от самого себя.
+ * Only `DocumentMarkupModel` is read and never `editor.markupModel`: the latter holds our own
+ * dimming highlighters, and a phantom would end up greying itself out.
  */
 object EditorColorSampler {
 
@@ -78,7 +77,7 @@ object EditorColorSampler {
         return result
     }
 
-    /** Цвет одного символа — например имени класса, с которого берём цвет для скобки. */
+    /** Colour of a single character — for example the class name a brace takes its colour from. */
     fun foregroundAt(editor: Editor, offset: Int): Color? {
         if (offset < 0 || offset >= editor.document.textLength) {
             return null
@@ -126,7 +125,7 @@ object EditorColorSampler {
             true
         }
 
-        // Слой определяет, кто кого перекрывает, а порядок обхода его не гарантирует.
+        // The layer decides who wins; iteration order does not guarantee it.
         overlapping.sortBy { highlighter -> highlighter.layer }
         val scheme = editor.colorsScheme
         for (highlighter in overlapping) {

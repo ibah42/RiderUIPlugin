@@ -1,10 +1,10 @@
 # Allman View
 
-Плагин для Rider (и любой другой IntelliJ-IDE), который **визуально** показывает код в стиле Allman,
-не меняя ни одного байта в файле.
+A plugin for Rider (and any other IntelliJ IDE) that shows your code in Allman style
+**visually**, without changing a single byte in the file.
 
 ```
-// в файле лежит                 // в редакторе видно
+// what is in the file            // what you see in the editor
 if (x) {                         if (x)
     Foo();                       {
 } else {                             Foo();
@@ -15,10 +15,10 @@ if (x) {                         if (x)
                                  }
 ```
 
-Одиночные инструкции тоже переносятся:
+Single statements are moved down as well:
 
 ```
-// в файле лежит                          // в редакторе видно
+// what is in the file                    // what you see in the editor
 if (body == null) return;                 if (body == null) return;
                                               return;
 
@@ -31,165 +31,174 @@ if (verbose) { Log(id); }                 if (verbose) { Log(id); }
                                           }
 ```
 
-Серым — реальный текст; фантом рисуется с настоящей подсветкой, той же, что у оригинала. Разносятся `if`, `else`, `for`, `foreach`, `while`,
-`using`, `lock`, `fixed`. Всё это отключается по отдельности в настройках.
+The grey text is the real one; the phantom is drawn with the real highlighting, the same one the
+original has. `if`, `else`, `for`, `foreach`, `while`, `using`, `lock` and `fixed` are all split.
+Each of those can be turned off separately in the settings.
 
-Намеренно **не** трогаются конструкции, где одна строка уместна: `using System.Text;`
-(директива, а не блок), `do { } while (x);`, `public int X { get; set; }`,
-`void M() { }`, `while (reader.Read());`, инициализаторы `new Point { X = 1 }`.
+Constructs where a single line is the right shape are deliberately left alone:
+`using System.Text;` (a directive, not a block), `do { } while (x);`,
+`public int X { get; set; }`, `void M() { }`, `while (reader.Read());`, and initializers such as
+`new Point { X = 1 }`.
 
-## Усиленные скобки типов и функций
+## Accented braces of types and functions
 
-Скобки, которые принадлежат объявлению типа (`class`, `struct`, `interface`, `enum`, `record`)
-и объявлению функции, красятся заметнее остальных: базовый цвет берётся **с самого имени** типа
-или метода в документе, уводится в сторону от фона и ставится жирным.
+Braces that belong to a type declaration (`class`, `struct`, `interface`, `enum`, `record`) or to
+a function declaration are painted more prominently than the rest: the base colour is taken
+**from the name itself** in the document, pushed away from the background, and set in bold.
 
-Цвет сэмплится с имени, а не берётся из ключей схемы, — так подсветка совпадает с тем, что
-реально делает ReSharper и текущая схема. Ключи `CLASS_NAME` и `FUNCTION_DECLARATION` остаются
-запасным вариантом на случай, если бэкенд ещё не ответил.
+The colour is sampled from the name rather than read from scheme keys, so the accent matches
+whatever ReSharper and the current colour scheme actually do. The `CLASS_NAME` and
+`FUNCTION_DECLARATION` keys remain as a fallback for when the backend has not answered yet.
 
-Затемнение считается **от фона, а не всегда к чёрному**: на светлой схеме цвет уводится к
-чёрному, на тёмной — к белому. Два отдельных процента в настройках. Затемнять на Darcula
-бессмысленно — скобка утонула бы в фоне.
+The shift is computed **relative to the background, not always towards black**: on a light scheme
+the colour moves towards black, on a dark one towards white. The settings hold two separate
+percentages. Darkening on Darcula would be pointless — the brace would sink into the background.
 
-Заметность даёт тень: копия глифа со сдвигом, нарисованная **до** самого символа.
-`CustomHighlighterRenderer` по умолчанию рисует над фоном и перед текстом, поэтому копия
-ложится под глиф и добавляет объём, не пачкая края. Цвет тени ведётся от фона к серому —
-серый темнее светлого фона и светлее тёмного, так что одна настройка работает в обеих темах.
-Сдвиг по X и Y задаётся отдельно: `X=1, Y=0` даёт псевдо-жирный вместо объёма.
+Prominence comes from a shadow: a copy of the glyph with an offset, drawn **before** the character
+itself. `CustomHighlighterRenderer` paints over the background but before the text, so the copy
+lands underneath the glyph and adds depth without dirtying the edges. The shadow colour runs from
+the background towards grey — grey is darker than a light background and lighter than a dark one,
+so one setting works in both themes. The X and Y offsets are separate: `X=1, Y=0` gives faux bold
+instead of depth.
 
-Тень рисуется и под фантомной скобкой тоже — иначе в K&R-коде её не было бы видно вовсе,
-ведь там на экране фантом, а не реальная скобка.
+The shadow is drawn under the phantom brace too — otherwise it would be invisible in K&R code,
+where what you see on screen is the phantom, not the real brace.
 
-Если блок длиннее порога, после закрывающей скобки появляется подпись — `class IosHttpClient`,
-`fun HandleNativeResult`. Это inline-инлей сразу после `}`, курсивом, цветом скобки, уведённым
-к серому. Правее скобки на строке обычно пусто, поэтому ничего не сдвигается.
+When a block is longer than the threshold, a label appears after the closing brace —
+`class IosHttpClient`, `fun HandleNativeResult`. It is an inline inlay right after the `}`, in
+italics, in the brace colour pushed towards grey. The area to the right of a closing brace is
+usually empty, so nothing shifts.
 
-Лямбды считаются функциями. Своего имени у них нет, поэтому цвет и подпись берутся у ближайшего
-осмысленного идентификатора: сначала у незакрытого вызова (`items.Select(y => {` → `Select`),
-и только если скобок нет — у цели присваивания (`Action handler = () => {` → `handler`).
+Lambdas count as functions. They have no name of their own, so the colour and the label come from
+the nearest meaningful identifier: first the unclosed call (`items.Select(y => {` → `Select`), and
+only when there is no call, the assignment target (`Action handler = () => {` → `handler`).
 
-Принадлежность определяется без парсера: сканер держит стек открытых `{`, и закрывающая скобка
-узнаёт свой блок, снимая его со стека. Вид блока читается из заголовка — ключевое слово типа,
-либо «кончается на `)` и первое слово не управляющее». Заголовок ищется на текущей строке, а если
-`{` стоит на своей строке (код уже в Allman) — на предыдущей.
+Ownership is worked out without a parser: the scanner keeps a stack of open `{`, and a closing
+brace recognizes its block by popping the stack. The kind of block is read from the header —
+either a type keyword, or "ends with `)` and the first word is not a control keyword". The header
+is looked for on the current line, and when the `{` sits on its own line (code that is already
+Allman), on the previous one.
 
-Что намеренно проходит мимо: `namespace`, автосвойства `{ get; set; }` и свойства с телом,
-инициализаторы `new Foo() { ... }`, лямбды `() => { }`, все управляющие конструкции. Констрейнты
-отрезаются до классификации, иначе `void Bind<T>(T v) where T : class {` сошёл бы за тип.
+What deliberately passes by: `namespace`, auto-properties `{ get; set; }` and properties with a
+body, initializers `new Foo() { ... }`, lambdas `() => { }`, and every control construct.
+Constraints are cut off before classification, otherwise
+`void Bind<T>(T v) where T : class {` would pass for a type.
 
-## Как это сделано
+## How it works
 
-Исходный текст **остаётся на месте** — он просто гасится, а рядом дорисовывается фантом.
-Два примитива платформы, оба чисто визуальные:
+The original text **stays where it is** — it is simply dimmed, and the phantom is drawn next to
+it. Two platform primitives, both purely visual:
 
-1. **RangeHighlighter** на `editor.markupModel`, слой `HighlighterLayer.LAST + 100`,
-   `TextAttributes` только с `foregroundColor`. Красит реальную `{` (и `else`/`catch`/`finally`
-   при полном Allman) в приглушённый цвет подсказок параметров.
+1. **RangeHighlighter** on `editor.markupModel`, layer `HighlighterLayer.LAST + 100`,
+   `TextAttributes` carrying only a `foregroundColor`. It paints the real `{` (and
+   `else`/`catch`/`finally` in full Allman) in the muted colour of parameter hints.
 2. **Block inlay** — `InlayModel.addBlockElement(lineEnd, relatesToPrecedingText = true, showAbove = false, ...)`.
-   Рисует фантомную строку под строкой-владельцем, на её отступе.
-   Каретка по инлею не ходит и перескакивает на реальный текст — как у подсказок параметров.
+   It draws the phantom line under its owner line, at that line's indent. The caret does not walk
+   into the inlay and skips to the real text, just like with parameter hints.
 
-Текст фантома — всегда непрерывный кусок документа, и `PhantomLine` хранит его `sourceOffset`.
-Поэтому подсветку можно спросить у самого редактора: символ фантома с индексом `i` лежит в
-документе на `sourceOffset + i`. Цвета собираются из двух источников — лексера
-(`EditorEx.getHighlighter()`) и разметки документа (`DocumentMarkupModel`), потому что в Rider
-подсветка C# приходит из бэкенда ReSharper именно разметкой, и одного лексера мало.
+The phantom text is always a contiguous slice of the document, and `PhantomLine` keeps its
+`sourceOffset`. That means the highlighting can be asked of the editor itself: phantom character
+`i` lives at `sourceOffset + i` in the document. Colours are collected from two sources — the
+lexer (`EditorEx.getHighlighter()`) and the document markup (`DocumentMarkupModel`) — because in
+Rider the C# highlighting arrives from the ReSharper backend as markup, and the lexer alone is
+not enough.
 
-Отступ фантома задаётся **уровнями**, а не пробелами: ширину уровня знает только редактор,
-а таб внутри строки `Graphics.drawString` не разворачивает — отступ бы просто пропал.
+The phantom indent is expressed in **levels**, not spaces: only the editor knows how wide a level
+is, and `Graphics.drawString` does not expand a tab inside a string — the indent would simply
+disappear.
 
-Фолдинг не используется сознательно: он конфликтовал с fold-регионами ReSharper на телах
-методов (`createFoldRegion` возвращал `null`, и перенос молча не срабатывал) и выталкивал
-каретку из схлопнутого куска прямо во время набора.
+Folding is deliberately not used: it clashed with ReSharper's fold regions on method bodies
+(`createFoldRegion` returned `null` and the move silently did not happen) and it pushed the caret
+out of the collapsed region while typing.
 
-Документ не трогается вообще. Копирование, поиск, компилятор, git и ReSharper видят
-реальный K&R-текст — диффы остаются чистыми.
+The document is never touched. Copying, search, the compiler, git and ReSharper all see the real
+K&R text, so diffs stay clean.
 
-У многострочной конструкции отступ берётся не у строки со скобкой, а у строки, с которой
-конструкция началась (сканер считает глубину `(` и `[`):
+For a multi-line construct the indent is taken not from the line holding the brace, but from the
+line the construct started on (the scanner tracks the depth of `(` and `[`):
 
 ```csharp
 private static void HandleNativeResult(
     int requestId,
-    bool isConnectionError) {   ← физически скобка здесь
-{                               ← фантом под `private`, а не под `bool`
+    bool isConnectionError) {   ← the brace physically sits here
+{                               ← the phantom lands under `private`, not under `bool`
 ```
 
-## Языки
+## Languages
 
-Диалект влияет **только** на разбор строковых литералов и комментариев — сами блоки
-везде одинаковые. Поэтому специальных правил всего два:
+The dialect affects **only** the parsing of string literals and comments — blocks themselves are
+the same everywhere. So there are just a handful of special rules:
 
-| Диалект | Расширения | Что учитывает |
+| Dialect | Extensions | What it handles |
 |---|---|---|
-| `CSHARP` | `cs csx` | `@"verbatim"`, `"""raw"""`, `$"{interp}"` с вложенными кавычками |
+| `CSHARP` | `cs csx` | `@"verbatim"`, `"""raw"""`, `$"{interp}"` with nested quotes |
 | `CPP` | `c cpp h hpp m mm metal hlsl glsl shader compute cginc usf` | `R"delim(raw)delim"`, `1'000'000` |
-| `JVM` | `java kt kts scala groovy gradle swift dart` | текстовые блоки `"""` |
-| `WEB` | `js jsx ts tsx go php` | `` `шаблоны ${...}` `` |
-| `GENERIC` | всё остальное (`rs json css scss sql proto zig`…) | `"..."`, `'...'`, `/* */`, `//` |
+| `JVM` | `java kt kts scala groovy gradle swift dart` | `"""` text blocks |
+| `WEB` | `js jsx ts tsx go php` | `` `templates ${...}` `` |
+| `GENERIC` | everything else (`rs json css scss sql proto zig`…) | `"..."`, `'...'`, `/* */`, `//` |
 
-Диалект `JVM` существует не для красоты: у Java, Kotlin, Scala и Swift есть `"""`-блоки,
-и без их разбора сканер уезжает внутрь многострочной строки. Тест это ловит явно — один и тот
-же Java-файл с text block даёт 1 срабатывание с `JVM` и 2 с `GENERIC`.
+The `JVM` dialect is not decoration: Java, Kotlin, Scala and Swift all have `"""` blocks, and
+without parsing them the scanner runs off inside a multi-line string. A test catches this
+explicitly — the same Java file with a text block yields 1 hit under `JVM` and 2 under `GENERIC`.
 
-Список расширений редактируется в Settings → Editor → Allman View. Там же галочка
-«Во всех текстовых файлах» — тогда список игнорируется и плагин работает везде.
+The extension list is edited in Settings → Editor → Allman View. The same page has an "All text
+files" checkbox, which ignores the list and runs the plugin everywhere.
 
-## Структура
+## Layout
 
-| Файл | Что делает |
+| File | What it does |
 |---|---|
-| `scan/BraceScanner.kt` | Лексер + поиск мест переноса. **Ноль зависимостей от IntelliJ**, покрыт тестами. |
-| `AllmanController.kt` | Один на редактор: пересобирает подсветку и инлеи по таймеру. |
-| `AllmanService.kt` | Подписка на создание редакторов, `refreshAll()`. |
-| `PhantomLineRenderer.kt` | Отрисовка фантомных строк. |
-| `EditorColorSampler.kt` | Достаёт настоящую подсветку редактора для куска документа. |
-| `BraceAccentStyle.kt` | Считает цвет скобки, тени и подписи от цвета имени и фона схемы. |
-| `BraceShadowRenderer.kt` | Рисует тень под реальной скобкой, до самого глифа. |
-| `BlockLabelRenderer.kt` | Подпись конца длинного блока после `}`. |
-| `AllmanSettings.kt` / `AllmanConfigurable.kt` | Настройки + панель в Settings → Editor → Allman View. |
+| `scan/BraceScanner.kt` | Lexer plus the search for places to move. **Zero IntelliJ dependencies**, covered by tests. |
+| `AllmanController.kt` | One per editor: rebuilds the highlighting and the inlays on a timer. |
+| `AllmanService.kt` | Subscribes to editor creation, `refreshAll()`. |
+| `PhantomLineRenderer.kt` | Draws the phantom lines. |
+| `EditorColorSampler.kt` | Pulls the editor's real highlighting for a slice of the document. |
+| `BraceAccentStyle.kt` | Works out the brace, shadow and label colours from the name colour and the scheme background. |
+| `BraceShadowRenderer.kt` | Draws the shadow under a real brace, before the glyph itself. |
+| `BlockLabelRenderer.kt` | The end-of-block label after a `}` of a long block. |
+| `AllmanSettings.kt` / `AllmanConfigurable.kt` | Settings plus the panel in Settings → Editor → Allman View. |
 
-## Сборка
+## Building
 
-Враппер лежит в репозитории, ставить Gradle отдельно не нужно.
+The wrapper is in the repository, so Gradle does not need to be installed separately.
 
 ```
-gradlew.bat test        # тесты сканера
-gradlew.bat runIde      # поднимает песочную IDE с плагином
-gradlew.bat buildPlugin # build/distributions/allman-view-0.9.0.zip
+gradlew.bat test        # scanner tests
+gradlew.bat runIde      # launches a sandbox IDE with the plugin
+gradlew.bat buildPlugin # build/distributions/allman-view-1.0.0.zip
 ```
 
-Версии зафиксированы так, потому что:
+The versions are pinned the way they are because:
 
-- **Gradle 9.7.0** — IntelliJ Platform Gradle Plugin 2.x требует минимум 9.0, а на JDK 25
-  Gradle умеет запускаться только с 9.1. На 8.x сборка падает с загадочным `What went wrong: 25.0.1`.
-- **Kotlin 2.4.20** — полностью поддерживает диапазон Gradle 7.6.3–9.7.0.
-- **jvmToolchain(21)** — платформа 2026.x работает на JBR 21, поэтому байткод нужен 21-й
-  независимо от того, каким JDK запущен сам Gradle. Если JDK 21 в системе нет,
-  `foojay-resolver-convention` в `settings.gradle.kts` скачает его автоматически.
+- **Gradle 9.7.0** — IntelliJ Platform Gradle Plugin 2.x needs at least 9.0, and on JDK 25 Gradle
+  can only start from 9.1. On 8.x the build fails with the cryptic
+  `What went wrong: 25.0.1`.
+- **Kotlin 2.4.20** — fully supports the Gradle 7.6.3–9.7.0 range.
+- **jvmToolchain(21)** — the 2026.x platform runs on JBR 21, so the bytecode has to be 21
+  regardless of which JDK runs Gradle itself. If JDK 21 is not installed,
+  `foojay-resolver-convention` in `settings.gradle.kts` downloads it automatically.
 
-Из IDEA: File → Open → папка проекта. Gradle JVM можно оставить любой 17+.
+From IDEA: File → Open → the project folder. The Gradle JVM can be any 17+.
 
-Целевая IDE задаётся в `gradle.properties`:
+The target IDE is set in `gradle.properties`:
 
 ```properties
-platformType=RD          # RD = Rider, IC = IntelliJ IDEA Community (качается в разы меньше)
+platformType=RD          # RD = Rider, IC = IntelliJ IDEA Community (a much smaller download)
 platformVersion=2026.2.2
 ```
 
-Все используемые API платформенные, так что собирать и проверять можно против `IC`,
-а ставить готовый zip в Rider.
+Every API in use is a platform API, so you can build and check against `IC` and install the
+finished zip into Rider.
 
-## Известные ограничения
+## Known limitations
 
-- Реальная `{` остаётся видимой, просто серой. Это осознанно: так видно, где физически лежит
-  текст, и не ломается ни каретка, ни чужой фолдинг. Отключается галочкой
-  «Гасить исходную скобку серым» (тогда останется только фантом поверх обычной скобки).
-- Фантомная строка не получает номер в гуттере и не участвует в indent guides —
-  вертикальные линии отступов будут разрываться.
-- В фантомную строку нельзя поставить каретку: это не текст.
-- Сканер полностью пересчитывает документ по таймеру (200 мс после правки).
-  На файлах в десятки тысяч строк это стоит померить и, если надо, сделать инкрементальным
-  (кэш состояния лексера на начало каждой строки).
-- `} while (x);` у `do`-цикла намеренно не разносится.
+- The real `{` stays visible, just grey. This is deliberate: it shows where the text physically
+  is, and it breaks neither the caret nor anyone else's folding. Turn it off with the "Dim the
+  original text" checkbox (only the phantom then remains, on top of the ordinary brace).
+- A phantom line gets no number in the gutter and takes no part in indent guides — the vertical
+  indent lines will break.
+- The caret cannot be placed in a phantom line: it is not text.
+- The scanner recomputes the whole document on a timer (200 ms after an edit). On files of tens of
+  thousands of lines this is worth measuring and, if needed, making incremental (caching the lexer
+  state at the start of each line).
+- The `} while (x);` of a `do` loop is deliberately not split.

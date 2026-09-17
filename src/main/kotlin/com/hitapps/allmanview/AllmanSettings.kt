@@ -9,14 +9,14 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.service
 
-/** Как оформлять скобки одного вида блоков. */
+/** How braces of one kind of block should look. */
 data class AccentConfig(
     val lightPercent: Int,
     val darkPercent: Int,
     val bold: Boolean,
     val shadow: Boolean,
 
-    /** Насколько тень отходит от фона к серому: 0 — невидима, 100 — сплошной серый. */
+    /** How far the shadow moves from the background towards grey: 0 invisible, 100 solid grey. */
     val shadowPercent: Int,
     val shadowOffsetX: Int,
     val shadowOffsetY: Int,
@@ -30,28 +30,28 @@ data class AccentConfig(
 class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Config()) {
 
     class Config : BaseState() {
-        /** Общий выключатель. */
+        /** Master switch. */
         var enabled: Boolean by property(true)
 
-        /** true — разносим ещё и `} else {` на три строки; false — только висящую `{`. */
+        /** true also splits `} else {` into three lines, not just the hanging `{`. */
         var fullAllman: Boolean by property(true)
 
-        /** Разносить `if (x) return;` на две строки. */
+        /** Split `if (x) return;` into two lines. */
         var splitStatements: Boolean by property(true)
 
-        /** Разворачивать `if (x) { Foo(); }` на четыре строки. */
+        /** Expand `if (x) { Foo(); }` into four lines. */
         var expandInlineBlocks: Boolean by property(true)
 
-        /** Гасить исходный текст, который визуально уехал вниз. */
+        /** Dim the original text that visually moved down. */
         var dimOriginal: Boolean by property(true)
 
-        /** Брать для гашения цвет подсказок IDE вместо своего процента. */
+        /** Use the IDE hint colour for dimming instead of an explicit percentage. */
         var dimUseHintColor: Boolean by property(true)
 
-        /** Насколько погашенный текст уведён к фону, если цвет подсказок не используется. */
+        /** How far dimmed text moves towards the background when the hint colour is not used. */
         var dimPercent: Int by property(55)
 
-        // --- скобки типов: class, struct, interface, enum, record ---
+        // --- type braces: class, struct, interface, enum, record ---
 
         var accentTypes: Boolean by property(true)
         var typeLightPercent: Int by property(50)
@@ -65,7 +65,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         var typeLabelMinLines: Int by property(50)
         var typeLabelGreyPercent: Int by property(50)
 
-        // --- скобки функций, методов, конструкторов и лямбд ---
+        // --- function braces: methods, constructors and lambdas ---
 
         var accentFunctions: Boolean by property(true)
         var functionLightPercent: Int by property(50)
@@ -79,7 +79,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         var functionLabelMinLines: Int by property(30)
         var functionLabelGreyPercent: Int by property(50)
 
-        /** Применять к любому текстовому файлу, игнорируя [extensions]. */
+        /** Apply to any text file, ignoring [extensions]. */
         var allFiles: Boolean by property(false)
 
         var extensions: String? by string(Dialects.DEFAULT_EXTENSIONS)
@@ -108,7 +108,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         return extension.lowercase() in extensionSet()
     }
 
-    /** Настройки одного вида блоков — чтобы не дублировать код на типы и функции. */
+    /** Settings for one kind of block, so types and functions share the same code path. */
     fun accentFor(kind: BlockKind): AccentConfig? {
         if (kind == BlockKind.TYPE && state.accentTypes) {
             return AccentConfig(

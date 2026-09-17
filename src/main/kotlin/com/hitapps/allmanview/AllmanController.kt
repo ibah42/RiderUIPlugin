@@ -25,11 +25,12 @@ import com.intellij.util.Alarm
 import java.awt.Color
 
 /**
- * Живёт на один редактор.
+ * One instance per editor.
  *
- * Документ не трогаем и фолдингом ничего не прячем: исходный текст остаётся на месте
- * и гасится подсветкой, а фантомные строки — block inlay. За счёт этого нет ни конфликтов
- * с фолдингом ReSharper, ни выталкивания каретки при наборе.
+ * The document is never touched and nothing is hidden by folding: the original text stays
+ * where it is and is dimmed by highlighting, while phantom lines are block inlays. That is
+ * why there are no clashes with ReSharper's folding and no caret being pushed around while
+ * typing.
  */
 class AllmanController(private val editor: Editor) : Disposable {
 
@@ -99,7 +100,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         )
     }
 
-    /** Offset скобки → как её оформлять. */
+    /** Brace offset to its styling. */
     private fun buildAccents(
         style: BraceAccentStyle,
         result: ScanResult,
@@ -144,11 +145,11 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /**
-     * Реальные `{` и `}` типов и функций: цвет, тень и подпись длинного блока.
+     * Real `{` and `}` of types and functions: colour, shadow and the long-block label.
      *
-     * Скобку, которая уже погашена как уехавшая вниз, не красим: там усиление
-     * противоречило бы гашению. Её роль играет фантом — он красится в рендерере.
-     * Подпись и тень при этом ставятся всё равно: они привязаны к реальной скобке.
+     * A brace already dimmed as "moved down" is left alone, because accenting would contradict
+     * the dimming. Its role is played by the phantom, which the renderer colours. The label and
+     * the shadow are still attached, since they belong to the real brace.
      */
     private fun paintRealBraces(
         style: BraceAccentStyle,
@@ -235,7 +236,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         val highlighter = editor.markupModel.addRangeHighlighter(
             start,
             end,
-            // выше синтаксической подсветки, иначе цвет перебьют обратно
+            // above the syntax highlighting, otherwise the colour is overridden back
             HighlighterLayer.LAST + layerOffset,
             attributes,
             HighlighterTargetArea.EXACT_RANGE,
@@ -256,7 +257,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         }
     }
 
-    /** По умолчанию — тот же приглушённый цвет, которым платформа рисует подсказки параметров. */
+    /** By default the same muted colour the platform uses for parameter hints. */
     private fun dimColor(settings: AllmanSettings): Color {
         val scheme = editor.colorsScheme
 
@@ -303,8 +304,8 @@ class AllmanController(private val editor: Editor) : Disposable {
             return null
         }
 
-        // Диалект нужен только для границ строковых литералов; незнакомое
-        // расширение разбирается как GENERIC и на любом C-подобном языке работает.
+        // The dialect only matters for string literal boundaries; an unknown extension is
+        // parsed as GENERIC, which works for any C-like language.
         return Dialects.forExtension(extension ?: "")
     }
 
@@ -319,18 +320,18 @@ class AllmanController(private val editor: Editor) : Disposable {
         private const val REFRESH_DELAY_MS = 200
         private const val IMMEDIATE_DELAY_MS = 0
 
-        /** Насколько выше синтаксической подсветки ставим гасящий хайлайтер. */
+        /** How far above the syntax highlighting the dimming highlighter sits. */
         private const val DIM_LAYER_OFFSET = 100
 
-        /** Усиление скобок — тоже выше синтаксиса, но ниже гашения. */
+        /** Brace accents also sit above syntax, but below the dimming. */
         private const val ACCENT_LAYER_OFFSET = 90
 
-        /** Тень рисуется до текста, слой нужен лишь чтобы не спорить с чужими рендерерами. */
+        /** The shadow paints before the text; the layer only keeps it out of others' way. */
         private const val SHADOW_LAYER_OFFSET = 80
 
         private const val MAX_PERCENT = 100
 
-        /** Сканер линейный, но на гигантских файлах полный пересчёт по таймеру ни к чему. */
+        /** The scanner is linear, but a full timed rescan of a huge file is pointless. */
         private const val MAX_FILE_CHARS = 2_000_000
 
         val KEY: Key<AllmanController> = Key.create("allman.view.controller")

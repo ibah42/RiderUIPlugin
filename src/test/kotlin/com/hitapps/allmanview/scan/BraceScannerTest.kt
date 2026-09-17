@@ -21,19 +21,19 @@ class BraceScannerTest {
         return BraceScanner(src, flavor, options).scan().sites
     }
 
-    /** Скобки, помеченные как принадлежащие типу или функции. */
+    /** Braces marked as belonging to a type or a function. */
     private fun accents(src: String, flavor: Flavor = Flavor.CSHARP): List<BraceAccent> {
         return BraceScanner(src, flavor, ScanOptions()).scan().accents
     }
 
-    /** Пары «символ скобки — чей блок», по порядку в документе. */
+    /** Pairs of brace character and owning block kind, in document order. */
     private fun accentKinds(src: String, flavor: Flavor = Flavor.CSHARP): List<Pair<Char, BlockKind>> {
         return accents(src, flavor)
             .sortedBy { it.offset }
             .map { src[it.offset] to it.kind }
     }
 
-    /** Имя, с которого будет взят цвет скобки. */
+    /** The name the brace colour will be taken from. */
     private fun accentName(src: String, accent: BraceAccent): String {
         if (accent.nameOffset < 0) {
             return ""
@@ -45,10 +45,10 @@ class BraceScannerTest {
         return src.substring(accent.nameOffset, end)
     }
 
-    /** Текст, который будет погашен серым. */
+    /** The text that will be dimmed. */
     private fun dimmed(src: String, site: PhantomSite) = src.substring(site.dimStart, site.dimEnd)
 
-    /** Как будет выглядеть редактор: «...» — погашенное, следом фантомные строки. */
+    /** How the editor will look: "..." marks dimmed text, then the phantom lines. */
     private fun render(src: String, flavor: Flavor = Flavor.CSHARP, fullAllman: Boolean = true): String {
         val sb = StringBuilder()
         var pos = 0
@@ -69,7 +69,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `простая висящая скобка`() {
+    fun `plain hanging brace`() {
         val src = "if (x) {\n    Foo();\n}"
         val site = scan(src).single()
         assertEquals("{", dimmed(src, site))
@@ -78,26 +78,26 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `гасим только скобку, не пробелы перед ней`() {
+    fun `dims only the brace, not the spaces before it`() {
         val src = "if (x)     {\n}"
         assertEquals("{", dimmed(src, scan(src).single()))
     }
 
     @Test
-    fun `отступ берётся у строки-владельца`() {
+    fun `indent comes from the owner line`() {
         val site = scan("\tclass A {\n\t}").single()
         assertEquals("\t", site.indent)
         assertEquals(listOf("{"), site.phantomTexts)
     }
 
     @Test
-    fun `отступ пробелами`() {
+    fun `indent made of spaces`() {
         val site = scan("    if (x) {\n    }").single()
         assertEquals("    ", site.indent)
     }
 
     @Test
-    fun `else разносится и гасится целиком`() {
+    fun `else is split and dimmed as a whole`() {
         val src = "if (x) {\n} else if (y) {\n}"
         val sites = scan(src)
         assertEquals(2, sites.size)
@@ -106,7 +106,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `catch и finally тоже`() {
+    fun `catch and finally too`() {
         val src = "try {\n} catch (E e) {\n} finally {\n}"
         val sites = scan(src)
         assertEquals(3, sites.size)
@@ -115,7 +115,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `else без скобки`() {
+    fun `else without a brace`() {
         val src = "if (x) {\n} else\n    Foo();"
         val sites = scan(src)
         assertEquals(2, sites.size)
@@ -124,7 +124,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `выключенный fullAllman оставляет else на месте`() {
+    fun `fullAllman off leaves else in place`() {
         val src = "if (x) {\n} else {\n}"
         val sites = scan(src, fullAllman = false)
         assertEquals(2, sites.size)
@@ -133,38 +133,38 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `уже Allman не трогаем`() {
+    fun `already Allman is left alone`() {
         assertTrue(scan("if (x)\n{\n}").isEmpty())
     }
 
     @Test
-    fun `do-while не разносим`() {
+    fun `do-while is not split`() {
         assertTrue(scan("do {\n} while (x);").none { it.phantomTexts.any { l -> l.startsWith("while") } })
     }
 
     @Test
-    fun `закрывашка с точкой с запятой не трогается`() {
+    fun `closing brace with a semicolon is left alone`() {
         assertEquals(1, scan("Run(() => {\n});").size)
     }
 
     @Test
-    fun `хвостовой комментарий остаётся на исходной строке`() {
+    fun `trailing comment stays on the original line`() {
         assertEquals("if (x) «{» // note\n{\n}", render("if (x) { // note\n}"))
     }
 
     @Test
-    fun `скобка внутри строкового литерала игнорируется`() {
+    fun `brace inside a string literal is ignored`() {
         assertTrue(scan("""var s = "if (x) {";""").isEmpty())
     }
 
     @Test
-    fun `скобка в комментарии игнорируется`() {
+    fun `brace inside a comment is ignored`() {
         assertTrue(scan("// if (x) {").isEmpty())
         assertTrue(scan("/* if (x) {\n   more { */").isEmpty())
     }
 
     @Test
-    fun `verbatim строка на несколько строк`() {
+    fun `multi-line verbatim string`() {
         assertEquals(1, scan("var s = @\"line1 {\nline2 {\";\nif (x) {\n}").size)
     }
 
@@ -174,17 +174,17 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `интерполяция с кавычкой внутри дырки`() {
+    fun `interpolation with a quote inside the hole`() {
         assertEquals(1, scan("var s = ${'$'}\"{dict[\"key\"]} tail\";\nif (x) {\n}").size)
     }
 
     @Test
-    fun `экранированные скобки в интерполяции`() {
+    fun `escaped braces in interpolation`() {
         assertTrue(scan("var s = ${'$'}\"{{ not a hole }}\";").isEmpty())
     }
 
     @Test
-    fun `незакрытая кавычка не ломает следующие строки`() {
+    fun `unterminated quote does not break the next lines`() {
         assertEquals(1, scan("var s = \"oops;\nif (x) {\n}").size)
     }
 
@@ -194,7 +194,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `cpp разделитель разрядов не char литерал`() {
+    fun `cpp digit separator is not a char literal`() {
         assertEquals(1, scan("int n = 1'000'000;\nif (x) {\n}", Flavor.CPP).size)
     }
 
@@ -203,34 +203,34 @@ class BraceScannerTest {
         assertEquals(1, scan("const s = `a ${'$'}{obj[`x`]} {`;\nif (x) {\n}", Flavor.WEB).size)
     }
 
-    // --- отступ у многострочных конструкций ---
+    // --- indent of multi-line constructs ---
 
     @Test
-    fun `многострочная сигнатура — скобка под началом объявления`() {
+    fun `multi-line signature puts the brace under the declaration start`() {
         val src = "    void Foo(\n        int a,\n        int b) {\n    }"
         assertEquals("    ", scan(src).single().indent)
     }
 
     @Test
-    fun `многострочное условие`() {
+    fun `multi-line condition`() {
         assertEquals("", scan("if (a &&\n    b) {\n}").single().indent)
     }
 
     @Test
-    fun `цепочка вызовов берёт отступ своей строки`() {
+    fun `call chain takes the indent of its own line`() {
         assertEquals("    ", scan("var x = Foo()\n    .Bar(y => {\n    });").single().indent)
     }
 
     @Test
-    fun `слишком длинное продолжение — фолбэк на свою строку`() {
+    fun `overlong continuation falls back to its own line`() {
         val src = "void A(\n" + "x,\n".repeat(60) + "y) {\n}"
         assertEquals("", scan(src).single().indent)
     }
 
-    // --- диалекты ---
+    // --- dialects ---
 
     @Test
-    fun `расширения раскладываются по диалектам`() {
+    fun `extensions map to dialects`() {
         assertEquals(Flavor.CSHARP, Dialects.forExtension("cs"))
         assertEquals(Flavor.CPP, Dialects.forExtension("HPP"))
         assertEquals(Flavor.JVM, Dialects.forExtension("kt"))
@@ -241,10 +241,10 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `java text block не даёт ложных срабатываний`() {
+    fun `java text block causes no false positives`() {
         val src = "String s = \"\"\"\n    if (x) {\n    \"\"\";\nvoid m() {\n}"
         assertEquals(1, scan(src, Flavor.JVM).size)
-        // без поддержки текстовых блоков тот же файл ловит лишнее — ради этого диалект и нужен
+        // without text block support the same file picks up extra hits, which is why the dialect exists
         assertEquals(2, scan(src, Flavor.GENERIC).size)
     }
 
@@ -254,12 +254,12 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `go raw string в бэктиках`() {
+    fun `go raw string in backticks`() {
         assertEquals(1, scan("var s = `if x {`\nfunc f() {\n}", Flavor.WEB).size)
     }
 
     @Test
-    fun `тройная кавычка в C++ не включает raw-режим`() {
+    fun `triple quote in C++ does not enable raw mode`() {
         assertEquals(1, scan("auto s = \"\"\"\";\nvoid f() {\n}", Flavor.CPP).size)
     }
 
@@ -269,32 +269,32 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `инициализатор объекта тоже переносится`() {
+    fun `object initializer is moved too`() {
         assertEquals(1, scan("var a = new Foo {\n};").size)
     }
 
     @Test
-    fun `однострочный блок не трогаем, когда разворачивание выключено`() {
+    fun `single-line block is left alone when expansion is off`() {
         assertTrue(scan("if (x) { Foo(); }", expandInlineBlocks = false).isEmpty())
     }
 
     @Test
-    fun `сигнатура на верхнем уровне`() {
+    fun `top level signature`() {
         val src = "private void Foo(\n    int a,\n    int b) {\n}"
         assertEquals("", scan(src).first().indent)
     }
 
     @Test
-    fun `swift — интерполяция обратным слешем`() {
+    fun `swift backslash interpolation`() {
         val src = "if a > 0 {\n    print(\"val \\(a) { x }\")\n}"
         assertEquals(1, scan(src, Flavor.JVM).size)
     }
 
 
-    // --- виртуальный перенос одиночных инструкций ---
+    // --- virtual split of single statements ---
 
     @Test
-    fun `if с одиночным return`() {
+    fun `if with a single return`() {
         val src = "if (pending == null) return;"
         val site = scan(src).single()
         assertEquals("return;", dimmed(src, site))
@@ -302,7 +302,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `if с throw`() {
+    fun `if with a throw`() {
         val src = "    if (x < 0) throw new ArgumentException(nameof(x));"
         val site = scan(src).single()
         assertEquals("throw new ArgumentException(nameof(x));", dimmed(src, site))
@@ -310,25 +310,25 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `цикл с одиночной инструкцией`() {
+    fun `loop with a single statement`() {
         val src = "foreach (var item in items) total += item.Price;"
         val site = scan(src).single()
         assertEquals("total += item.Price;", dimmed(src, site))
     }
 
     @Test
-    fun `lock с одиночной инструкцией`() {
+    fun `lock with a single statement`() {
         assertEquals(listOf("_count++;"), scan("lock (gate) _count++;").single().phantomTexts)
     }
 
     @Test
-    fun `using-директива не разносится`() {
+    fun `using directive is not split`() {
         assertTrue(scan("using System.Text;").isEmpty())
         assertTrue(scan("using static System.Math;").isEmpty())
     }
 
     @Test
-    fun `using-выражение разносится`() {
+    fun `using statement is split`() {
         assertEquals(
             listOf("stream.Flush();"),
             scan("using (var stream = Open()) stream.Flush();").single().phantomTexts,
@@ -336,31 +336,31 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `пустая инструкция не разносится`() {
+    fun `empty statement is not split`() {
         assertTrue(scan("while (reader.Read());").isEmpty())
     }
 
     @Test
-    fun `do-while в одну строку не трогаем`() {
+    fun `single-line do-while is left alone`() {
         assertTrue(scan("do { } while (x);").isEmpty())
     }
 
     @Test
-    fun `скобка внутри литерала не считается концом заголовка`() {
+    fun `paren inside a literal does not end the header`() {
         val src = """if (Check(")")) Foo();"""
         val site = scan(src).single()
         assertEquals("Foo();", dimmed(src, site))
     }
 
     @Test
-    fun `хвостовой комментарий остаётся при переносе инструкции`() {
+    fun `trailing comment survives a statement split`() {
         val src = "if (x) return; // early out"
         val site = scan(src).single()
         assertEquals("return;", dimmed(src, site))
     }
 
     @Test
-    fun `закрывающая скобка, else и инструкция — три строки`() {
+    fun `closing brace, else and statement make three lines`() {
         val src = "if (x) {\n} else return;"
         val site = scan(src)[1]
         assertEquals(" else return;", dimmed(src, site))
@@ -368,29 +368,29 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `else if с инструкцией`() {
+    fun `else if with a statement`() {
         val src = "else if (x) return;"
         assertEquals(listOf("return;"), scan(src).single().phantomTexts)
     }
 
     @Test
-    fun `отступ задаётся уровнями, а не пробелами`() {
-        // Сканер не знает ширину отступа: таб внутри строки drawString не разворачивает,
-        // поэтому в тексте фантома отступа нет вовсе — его рисует редактор.
+    fun `indent is expressed in levels, not spaces`() {
+        // The scanner does not know the indent width: drawString does not expand a tab inside
+        // a string, so the phantom text carries no indent at all; the editor draws it.
         val line = scan("if (x) return;").single().phantomLines.single()
         assertEquals("return;", line.text)
         assertEquals(1, line.extraIndentLevels)
     }
 
     @Test
-    fun `выключенный splitStatements ничего не разносит`() {
+    fun `splitStatements off splits nothing`() {
         assertTrue(scan("if (x) return;", splitStatements = false).isEmpty())
     }
 
-    // --- однострочный блок в скобках ---
+    // --- single-line braced block ---
 
     @Test
-    fun `однострочный блок разворачивается`() {
+    fun `single-line block is expanded`() {
         val src = "if (x) { Foo(); }"
         val site = scan(src).single()
         assertEquals("{ Foo(); }", dimmed(src, site))
@@ -398,53 +398,53 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `пустой однострочный блок`() {
+    fun `empty single-line block`() {
         assertEquals(listOf("{", "}"), scan("if (x) { }").single().phantomTexts)
     }
 
     @Test
-    fun `вложенный однострочный блок разворачивается целиком`() {
+    fun `nested single-line block is expanded as a whole`() {
         val site = scan("if (x) { if (y) { a(); } }").single()
         assertEquals(listOf("{", "if (y) { a(); }", "}"), site.phantomTexts)
     }
 
     @Test
-    fun `закрывающая скобка с else и блоком`() {
+    fun `closing brace with else and a block`() {
         val src = "try {\n} catch (E e) { Log(e); }"
         val site = scan(src)[1]
         assertEquals(listOf("catch (E e)", "{", "Log(e);", "}"), site.phantomTexts)
     }
 
     @Test
-    fun `автосвойство не трогаем`() {
+    fun `auto-property is left alone`() {
         assertTrue(scan("public int Count { get; set; }").isEmpty())
     }
 
     @Test
-    fun `пустое тело метода в одну строку не трогаем`() {
+    fun `empty single-line method body is left alone`() {
         assertTrue(scan("public void Dispose() { }").isEmpty())
     }
 
     @Test
-    fun `инициализатор в одну строку не трогаем`() {
+    fun `single-line initializer is left alone`() {
         assertTrue(scan("var point = new Point { X = 1, Y = 2 };").isEmpty())
     }
 
 
     @Test
-    fun `инструкция уезжает на уровень глубже`() {
+    fun `statement moves one level deeper`() {
         val lines = scan("if (x) return;").single().phantomLines
         assertEquals(1, lines.single().extraIndentLevels)
     }
 
     @Test
-    fun `заголовок и скобки остаются на своём уровне`() {
+    fun `header and braces stay at their own level`() {
         val lines = scan("try {\n} catch (E e) { Log(e); }")[1].phantomLines
         assertEquals(listOf(0, 0, 1, 0), lines.map { it.extraIndentLevels })
     }
 
     @Test
-    fun `текст фантома лежит в документе по своему offset`() {
+    fun `phantom text sits in the document at its offset`() {
         val src = "    if (ready) Launch();"
         for (line in scan(src).single().phantomLines) {
             val slice = src.substring(line.sourceOffset, line.sourceOffset + line.text.length)
@@ -453,7 +453,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `offset совпадает с текстом и у скобок, и у заголовка`() {
+    fun `offset matches the text for braces and header alike`() {
         val src = "if (x) {\n} else if (y) {\n}"
         for (site in scan(src)) {
             for (line in site.phantomLines) {
@@ -464,16 +464,16 @@ class BraceScannerTest {
     }
 
 
-    // --- принадлежность скобок типам и функциям ---
+    // --- brace ownership by types and functions ---
 
     @Test
-    fun `скобки класса помечаются как тип`() {
+    fun `class braces are marked as a type`() {
         val src = "public class Spawner {\n}"
         assertEquals(listOf('{' to BlockKind.TYPE, '}' to BlockKind.TYPE), accentKinds(src))
     }
 
     @Test
-    fun `цвет берётся с имени класса`() {
+    fun `colour is taken from the class name`() {
         val src = "public class Spawner {\n}"
         for (accent in accents(src)) {
             assertEquals("Spawner", accentName(src, accent))
@@ -481,7 +481,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `struct interface enum record тоже типы`() {
+    fun `struct interface enum record are types too`() {
         for (keyword in listOf("struct", "interface", "enum", "record")) {
             val src = "public $keyword Thing {\n}"
             assertEquals(2, accents(src).size)
@@ -491,46 +491,46 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `record struct — имя берётся после обоих слов`() {
+    fun `record struct takes the name after both words`() {
         val src = "public record struct Point(int X) {\n}"
         assertEquals("Point", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `метод помечается как функция`() {
+    fun `method is marked as a function`() {
         val src = "private void Update() {\n}"
         assertEquals(listOf('{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION), accentKinds(src))
         assertEquals("Update", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `конструктор — тоже функция`() {
+    fun `constructor is a function too`() {
         val src = "public Spawner(int count) {\n}"
         assertEquals("Spawner", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `генерик-метод — имя до угловых скобок`() {
+    fun `generic method takes the name before the angle brackets`() {
         val src = "public T Resolve<T>(string key) {\n}"
         assertEquals("Resolve", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `where-констрейнты не мешают`() {
+    fun `where constraints do not interfere`() {
         val src = "public void Bind<T>(T value) where T : class {\n}"
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
         assertEquals("Bind", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `многострочная сигнатура распознаётся`() {
+    fun `multi-line signature is recognised`() {
         val src = "private static void Handle(\n    int id,\n    bool flag) {\n}"
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
         assertEquals("Handle", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `вложенный класс и его методы`() {
+    fun `nested class and its methods`() {
         val src = "class Outer {\n    class Inner {\n        void M() {\n        }\n    }\n}"
         assertEquals(
             listOf(
@@ -546,8 +546,8 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `две скобки на одной строке не путаются`() {
-        // у второй скобки заголовок начинается после первой, иначе `class` утёк бы в метод
+    fun `two braces on one line do not get confused`() {
+        // the second brace's header starts after the first, otherwise `class` would leak into the method
         val src = "class A { void M() {\n} }"
         assertEquals(
             listOf('{' to BlockKind.TYPE, '{' to BlockKind.FUNCTION),
@@ -555,10 +555,10 @@ class BraceScannerTest {
         )
     }
 
-    // --- что НЕ должно попадать в усиление ---
+    // --- what must NOT be accented ---
 
     @Test
-    fun `управляющие конструкции не усиливаются`() {
+    fun `control constructs are not accented`() {
         for (src in listOf(
             "if (x) {\n}",
             "for (int i = 0; i < n; i++) {\n}",
@@ -574,16 +574,16 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `инициализаторы не усиливаются`() {
+    fun `initializers are not accented`() {
         assertTrue(accents("var a = new Foo() {\n};").isEmpty())
         assertTrue(accents("return new Foo() {\n};").isEmpty())
         assertTrue(accents("var list = new List<int> {\n};").isEmpty())
     }
 
-    // --- лямбды считаются функциями, имя берётся у ближайшего осмысленного ---
+    // --- lambdas count as functions and take the nearest meaningful name ---
 
     @Test
-    fun `лямбда берёт имя у метода, которому передана`() {
+    fun `lambda takes the name of the method it is passed to`() {
         val src = "Run(() => {\n});"
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
         assertEquals("Run", accentName(src, accents(src).first()))
@@ -591,34 +591,34 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `лямбда берёт имя у цели присваивания`() {
+    fun `lambda takes the name of the assignment target`() {
         val src = "Action handler = () => {\n};"
         assertEquals("handler", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `лямбда в цепочке берёт последний незакрытый вызов`() {
+    fun `lambda in a chain takes the last unclosed call`() {
         val src = "var r = items.Where(x => x > 0).Select(y => {\n});"
         assertEquals("Select", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `лямбда после return всё равно функция`() {
+    fun `lambda after return is still a function`() {
         val src = "return items.Select(x => {\n});"
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
         assertEquals("Select", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `анонимный метод через delegate`() {
+    fun `anonymous method via delegate`() {
         assertEquals(BlockKind.FUNCTION, accents("Run(delegate {\n});").first().kind)
         assertEquals(BlockKind.FUNCTION, accents("Run(delegate(int x) {\n});").first().kind)
     }
 
-    // --- подпись и протяжённость блока ---
+    // --- label and block span ---
 
     @Test
-    fun `ключевое слово подписи`() {
+    fun `label keyword`() {
         assertEquals("class", accents("class A {\n}").first().keyword)
         assertEquals("struct", accents("struct A {\n}").first().keyword)
         assertEquals("interface", accents("interface A {\n}").first().keyword)
@@ -627,7 +627,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `длина имени позволяет его вырезать`() {
+    fun `name length allows slicing it out`() {
         val src = "public class IosHttpClient {\n}"
         val accent = accents(src).first()
         assertEquals(
@@ -637,7 +637,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `протяжённость блока считается в строках`() {
+    fun `block span is counted in lines`() {
         val src = "class A {\n" + "    // line\n".repeat(9) + "}"
         val closing = accents(src).first { !it.isOpening }
         assertEquals(10, closing.spannedLines)
@@ -645,7 +645,7 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `типы и функции включаются по отдельности`() {
+    fun `types and functions toggle independently`() {
         val src = "class A {\n    void M() {\n    }\n}"
         val onlyTypes = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentFunctions = false)).scan()
         assertTrue(onlyTypes.accents.all { it.kind == BlockKind.TYPE })
@@ -655,38 +655,38 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `свойства не усиливаются`() {
+    fun `properties are not accented`() {
         assertTrue(accents("public int Count { get; set; }").isEmpty())
         assertTrue(accents("public int Count {\n    get {\n        return 1;\n    }\n}").isEmpty())
     }
 
     @Test
-    fun `namespace не усиливается`() {
+    fun `namespace is not accented`() {
         assertTrue(accents("namespace Com.Hitapps.Core {\n}").isEmpty())
     }
 
     @Test
-    fun `слово class внутри литерала не делает блок типом`() {
+    fun `the word class inside a literal does not make a type`() {
         assertTrue(accents("Log(\"class A\");\nif (x) {\n}").isEmpty())
     }
 
     @Test
-    fun `выключённое усиление не даёт меток`() {
+    fun `disabled accenting produces no marks`() {
         val options = ScanOptions(accentTypes = false, accentFunctions = false)
         val result = BraceScanner("class A {\n}", Flavor.CSHARP, options).scan()
         assertTrue(result.accents.isEmpty())
     }
 
     @Test
-    fun `несбалансированные скобки не роняют стек`() {
+    fun `unbalanced braces do not crash the stack`() {
         val result = BraceScanner("}\n}\nclass A {\n", Flavor.CSHARP, ScanOptions()).scan()
         assertEquals(1, result.accents.size)
     }
 
-    // --- другие языки ---
+    // --- other languages ---
 
     @Test
-    fun `kotlin fun и class`() {
+    fun `kotlin fun and class`() {
         val src = "class Foo {\n    fun bar() {\n    }\n}"
         assertEquals(
             listOf('{' to BlockKind.TYPE, '{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION, '}' to BlockKind.TYPE),
@@ -695,37 +695,37 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `go struct — имя стоит перед ключевым словом`() {
+    fun `go struct has the name before the keyword`() {
         val src = "type Point struct {\n}"
         assertEquals(BlockKind.TYPE, accents(src, Flavor.WEB).first().kind)
         assertEquals("Point", accentName(src, accents(src, Flavor.WEB).first()))
     }
 
 
-    // --- код, уже написанный в Allman: заголовок на строке выше ---
+    // --- code already written in Allman: the header is on the line above ---
 
     @Test
-    fun `класс в Allman-стиле`() {
+    fun `class in Allman style`() {
         val src = "public class Spawner\n{\n}"
         assertEquals(listOf('{' to BlockKind.TYPE, '}' to BlockKind.TYPE), accentKinds(src))
         assertEquals("Spawner", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `метод в Allman-стиле`() {
+    fun `method in Allman style`() {
         val src = "private void Update()\n{\n}"
         assertEquals(listOf('{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION), accentKinds(src))
         assertEquals("Update", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `многострочная сигнатура в Allman-стиле`() {
+    fun `multi-line signature in Allman style`() {
         val src = "static void Handle(\n    int id,\n    bool flag)\n{\n}"
         assertEquals("Handle", accentName(src, accents(src).first()))
     }
 
     @Test
-    fun `управляющие конструкции в Allman-стиле не усиливаются`() {
+    fun `control constructs in Allman style are not accented`() {
         assertTrue(accents("if (x)\n{\n}").isEmpty())
         assertTrue(accents("foreach (var a in b)\n{\n}").isEmpty())
         assertTrue(accents("try\n{\n}").isEmpty())
@@ -733,12 +733,12 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `свойство с телом в Allman-стиле не усиливается`() {
+    fun `property with a body in Allman style is not accented`() {
         assertTrue(accents("public int Count\n{\n    get\n    {\n        return 1;\n    }\n}").isEmpty())
     }
 
     @Test
-    fun `якорь указывает на конец строки`() {
+    fun `anchor points at the end of the line`() {
         val src = "if (x) { // c\n}"
         assertEquals(src.indexOf('\n'), scan(src).single().anchorOffset)
     }

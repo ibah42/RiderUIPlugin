@@ -8,6 +8,6 @@ pluginManagement {
 }
 
 plugins {
-    // Позволяет Gradle самому скачать JDK 21 под toolchain, если его нет в системе.
+    // Lets Gradle download JDK 21 for the toolchain when the system does not have it.
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }

@@ -1,11 +1,11 @@
 package com.hitapps.allmanview.scan
 
 /**
- * Сопоставление расширения файла и диалекта.
+ * Maps a file extension to a dialect.
  *
- * Разница между диалектами — только в устройстве строковых литералов. Если расширение
- * неизвестно, берём [Flavor.GENERIC]: он понимает `"..."` и `'...'` и потому безопасен
- * почти для любого C-подобного синтаксиса.
+ * Dialects differ only in how string literals are built. When the extension is unknown
+ * we fall back to [Flavor.GENERIC]: it understands `"..."` and `'...'`, which is safe
+ * for almost any C-like syntax.
  */
 object Dialects {
 
@@ -25,13 +25,13 @@ object Dialects {
         "js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "go", "php",
     )
 
-    /** Прочее, где `{` в конце строки осмысленна, но экзотики в литералах нет. */
+    /** Everything else where a trailing `{` is meaningful but literals hold no surprises. */
     private val PLAIN_EXTENSIONS = setOf(
         "json", "json5", "jsonc", "rs", "css", "scss", "less", "sass", "styl",
         "proto", "sql", "zig", "hcl", "tf", "tfvars", "uss",
     )
 
-    /** Список по умолчанию для настройки «расширения файлов». */
+    /** Default value of the "file extensions" setting. */
     val DEFAULT_EXTENSIONS: String = buildDefaultExtensions()
 
     fun forExtension(extension: String): Flavor {

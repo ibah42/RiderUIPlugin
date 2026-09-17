@@ -10,11 +10,11 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 
 /**
- * Тень под скобкой: копия глифа со сдвигом.
+ * A shadow under a brace: a copy of the glyph drawn with an offset.
  *
- * Именно тень, а не жирный шрифт: [CustomHighlighterRenderer] по умолчанию рисует
- * над фоном, но **до текста**, поэтому копия ложится под настоящий глиф и добавляет
- * объём, не размывая сам символ. Если бы рисовалось после текста, по краям была бы грязь.
+ * A shadow rather than a bold font on purpose: by default [CustomHighlighterRenderer] paints
+ * over the background but **before the text**, so the copy lands underneath the real glyph and
+ * adds depth without smearing it. Painting after the text would leave dirty anti-aliased edges.
  */
 class BraceShadowRenderer(
     private val shadowColor: Color,

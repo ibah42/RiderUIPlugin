@@ -15,18 +15,18 @@ import java.awt.Graphics2D
 import java.awt.Rectangle
 
 /**
- * Рисует фантомные строки под строкой-владельцем.
+ * Draws the phantom lines underneath their owner line.
  *
- * Это не текст: каретку сюда поставить нельзя, в буфер обмена и в git ничего не попадает.
- * Каретка ходит по реальному тексту, инлей её просто обтекает — как подсказки параметров.
+ * This is not text: the caret cannot be placed here, and nothing reaches the clipboard or git.
+ * The caret walks the real text and the inlay simply flows around it, like parameter hints.
  *
- * Подсветка фантома берётся у настоящего текста: каждый символ фантома лежит в документе
- * по известному offset-у, поэтому цвет и начертание можно спросить у редактора.
+ * Phantom highlighting is taken from the real text: every phantom character lives at a known
+ * document offset, so its colour and font style can be asked of the editor.
  *
- * @param braceStyles оформление скобок типов и функций, по offset-у скобки. Оно живёт
- *   в `editor.markupModel`, куда [EditorColorSampler] не смотрит, поэтому его приходится
- *   передавать отдельно. Тень фантомной скобки рисуется здесь же — иначе в K&R-коде
- *   она была бы только у реальной скобки, которой не видно.
+ * @param braceStyles styling of type and function braces, keyed by brace offset. It lives in
+ *   `editor.markupModel`, which [EditorColorSampler] does not read, so it has to be passed in.
+ *   The phantom brace shadow is drawn here as well — otherwise, in K&R code, only the real brace
+ *   would have one, and that brace is not what you see.
  */
 class PhantomLineRenderer(
     private val indent: String,
@@ -109,7 +109,7 @@ class PhantomLineRenderer(
         }
     }
 
-    /** Тень рисуется до самого глифа, поэтому ложится под него. */
+    /** Drawn before the glyph itself, so it ends up underneath. */
     private fun paintShadow(
         graphics: Graphics,
         chunk: String,
@@ -137,7 +137,7 @@ class PhantomLineRenderer(
     private fun styleOf(editor: Editor, line: PhantomLine): TextStyleRun {
         val style = EditorColorSampler.styleOf(editor, line.sourceOffset, line.text.length)
 
-        // Скобка типа или функции красится поверх обычной подсветки.
+        // A type or function brace is painted on top of the ordinary highlighting.
         for (index in line.text.indices) {
             val braceStyle = braceStyles[line.sourceOffset + index]
             if (braceStyle != null) {
@@ -151,7 +151,7 @@ class PhantomLineRenderer(
         return EditorUtil.getSpaceWidth(Font.PLAIN, editor)
     }
 
-    /** Отступ фантомной строки в колонках: отступ владельца плюс уровни вложенности. */
+    /** Phantom line indent in columns: the owner's indent plus nesting levels. */
     private fun startColumn(editor: Editor, line: PhantomLine): Int {
         return indentInColumns(editor) + line.extraIndentLevels * indentSize(editor)
     }
@@ -160,7 +160,7 @@ class PhantomLineRenderer(
         return editor.settings.getTabSize(editor.project).coerceAtLeast(1)
     }
 
-    /** Отступ строки-владельца в колонках: таб разворачивается до следующей табуляции. */
+    /** Owner line indent in columns; a tab expands to the next tab stop. */
     private fun indentInColumns(editor: Editor): Int {
         val tabSize = indentSize(editor)
         var columns = 0
@@ -176,7 +176,7 @@ class PhantomLineRenderer(
     }
 
     private companion object {
-        /** Запас справа, чтобы последний символ не обрезался. */
+        /** Spare column on the right so the last character is not clipped. */
         const val TRAILING_COLUMNS = 1
     }
 }
