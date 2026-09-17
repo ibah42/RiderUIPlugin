@@ -20,7 +20,7 @@ data class AccentConfig(
     val shadowPercent: Int,
     val shadowOffsetX: Int,
     val shadowOffsetY: Int,
-    val label: Boolean,
+    val showLabel: Boolean,
     val labelMinLines: Int,
     val labelGreyPercent: Int,
 )
@@ -162,7 +162,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
                 shadowPercent = state.typeShadowPercent,
                 shadowOffsetX = state.typeShadowOffsetX,
                 shadowOffsetY = state.typeShadowOffsetY,
-                label = state.typeLabel,
+                showLabel = state.typeLabel,
                 labelMinLines = state.typeLabelMinLines,
                 labelGreyPercent = state.typeLabelGreyPercent,
             )
@@ -176,7 +176,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
                 shadowPercent = state.functionShadowPercent,
                 shadowOffsetX = state.functionShadowOffsetX,
                 shadowOffsetY = state.functionShadowOffsetY,
-                label = state.functionLabel,
+                showLabel = state.functionLabel,
                 labelMinLines = state.functionLabelMinLines,
                 labelGreyPercent = state.functionLabelGreyPercent,
             )
@@ -190,7 +190,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
                 shadowPercent = state.namespaceShadowPercent,
                 shadowOffsetX = state.namespaceShadowOffsetX,
                 shadowOffsetY = state.namespaceShadowOffsetY,
-                label = state.namespaceLabel,
+                showLabel = state.namespaceLabel,
                 labelMinLines = NAMESPACE_LABEL_MIN_LINES,
                 labelGreyPercent = state.namespaceLabelGreyPercent,
             )

@@ -93,7 +93,7 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                                 .comment("Turn off to set the dimming strength by hand.")
                         }
                         row("Dim towards background, %:") {
-                            spinner(0..100, 5).bindIntValue(config::dimPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::dimPercent)
                         }
                     }.enabledIf(dimOriginal.selected)
                 }.enabledIf(moveBraces.selected)
@@ -128,7 +128,7 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             )
                     }
                     row("\"nest\" marker towards grey, %:") {
-                        spinner(0..100, 5).bindIntValue(config::nestedLabelGreyPercent)
+                        spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::nestedLabelGreyPercent)
                             .comment("Based on the editor's keyword colour, not the block's own accent.")
                     }.enabledIf(nestedMarkerEnabled.selected)
                 }.enabledIf(accentBraces.selected)
@@ -147,10 +147,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             label("Brace").bold()
                         }
                         row("Towards black on a light scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::typeLightPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeLightPercent)
                         }
                         row("Towards white on a dark scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::typeDarkPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeDarkPercent)
                         }
                         row {
                             checkBox("Bold").bindSelected(config::typeBold)
@@ -165,13 +165,13 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("Shadow strength, %:") {
-                                spinner(0..100, 5).bindIntValue(config::typeShadowPercent)
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeShadowPercent)
                                     .comment("0 hides the shadow, 100 makes it solid grey.")
                             }
                             row("Shadow offset, px:") {
-                                spinner(-8..8, 1).bindIntValue(config::typeShadowOffsetX)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetX)
                                 label("X")
-                                spinner(-8..8, 1).bindIntValue(config::typeShadowOffsetY)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetY)
                                 label("Y")
                                     .comment("X=1, Y=0 gives faux bold instead of depth.")
                             }
@@ -188,10 +188,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("From this block length, lines:") {
-                                spinner(1..2000, 5).bindIntValue(config::typeLabelMinLines)
+                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP).bindIntValue(config::typeLabelMinLines)
                             }
                             row("Label towards grey, %:") {
-                                spinner(0..100, 5).bindIntValue(config::typeLabelGreyPercent)
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeLabelGreyPercent)
                             }
                         }.enabledIf(typeLabel.selected)
                     }.enabledIf(accentTypes.selected)
@@ -216,10 +216,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             label("Brace").bold()
                         }
                         row("Towards black on a light scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::functionLightPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionLightPercent)
                         }
                         row("Towards white on a dark scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::functionDarkPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionDarkPercent)
                         }
                         row {
                             checkBox("Bold").bindSelected(config::functionBold)
@@ -234,13 +234,13 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("Shadow strength, %:") {
-                                spinner(0..100, 5).bindIntValue(config::functionShadowPercent)
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionShadowPercent)
                                     .comment("0 hides the shadow, 100 makes it solid grey.")
                             }
                             row("Shadow offset, px:") {
-                                spinner(-8..8, 1).bindIntValue(config::functionShadowOffsetX)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetX)
                                 label("X")
-                                spinner(-8..8, 1).bindIntValue(config::functionShadowOffsetY)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetY)
                                 label("Y")
                                     .comment("X=1, Y=0 gives faux bold instead of depth.")
                             }
@@ -257,10 +257,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("From this block length, lines:") {
-                                spinner(1..2000, 5).bindIntValue(config::functionLabelMinLines)
+                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP).bindIntValue(config::functionLabelMinLines)
                             }
                             row("Label towards grey, %:") {
-                                spinner(0..100, 5).bindIntValue(config::functionLabelGreyPercent)
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionLabelGreyPercent)
                             }
                         }.enabledIf(functionLabel.selected)
                     }.enabledIf(accentFunctions.selected)
@@ -285,10 +285,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             label("Brace").bold()
                         }
                         row("Towards black on a light scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::namespaceLightPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceLightPercent)
                         }
                         row("Towards white on a dark scheme, %:") {
-                            spinner(0..100, 5).bindIntValue(config::namespaceDarkPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceDarkPercent)
                                 .comment(
                                     "With no name to sample, the colour starts from the " +
                                         "editor's keyword colour.",
@@ -307,13 +307,13 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("Shadow strength, %:") {
-                                spinner(0..100, 5).bindIntValue(config::namespaceShadowPercent)
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceShadowPercent)
                                     .comment("0 hides the shadow, 100 makes it solid grey.")
                             }
                             row("Shadow offset, px:") {
-                                spinner(-8..8, 1).bindIntValue(config::namespaceShadowOffsetX)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetX)
                                 label("X")
-                                spinner(-8..8, 1).bindIntValue(config::namespaceShadowOffsetY)
+                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetY)
                                 label("Y")
                                     .comment("X=1, Y=0 gives faux bold instead of depth.")
                             }
@@ -329,7 +329,7 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                                 .comment("}  ns")
                         }
                         row("Label towards grey, %:") {
-                            spinner(0..100, 5).bindIntValue(config::namespaceLabelGreyPercent)
+                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceLabelGreyPercent)
                         }.enabledIf(namespaceLabel.selected)
                     }.enabledIf(accentNamespaces.selected)
                 }.enabledIf(accentBraces.selected)
@@ -381,6 +381,20 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
     override fun apply() {
         super.apply()
         AllmanService.getInstance().refreshAll()
+    }
+
+    private companion object {
+        /** Every colour setting is a percentage, and every one of them uses this same spinner. */
+        val PERCENT_RANGE = 0..ColorBalance.MAX_PERCENT
+        const val PERCENT_STEP = 5
+
+        /** Pixels, and only a few of them: a shadow further out than this is a second glyph. */
+        val SHADOW_OFFSET_RANGE = -8..8
+        const val SHADOW_OFFSET_STEP = 1
+
+        /** A block length in lines. The ceiling is only there to keep the spinner sane. */
+        val BLOCK_LINES_RANGE = 1..2000
+        const val BLOCK_LINES_STEP = 5
     }
 }
 

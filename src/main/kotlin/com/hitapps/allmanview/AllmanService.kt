@@ -52,7 +52,7 @@ class AllmanService : Disposable {
                 attach(editor)
                 val controller = editor.getUserData(AllmanController.KEY)
                 if (controller != null) {
-                    controller.schedule(0)
+                    controller.schedule(AllmanController.IMMEDIATE_DELAY_MS)
                 }
             }
         }

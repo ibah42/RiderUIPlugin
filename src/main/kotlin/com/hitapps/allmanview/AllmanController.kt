@@ -21,7 +21,6 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
-import com.intellij.ui.ColorUtil
 import com.intellij.util.Alarm
 import java.awt.Color
 
@@ -86,14 +85,14 @@ class AllmanController(private val editor: Editor) : Disposable {
         ).scan()
 
         val accentStyle = BraceAccentStyle(editor, settings)
-        val braceStyles = buildAccents(accentStyle, result)
+        val braceStyles = buildBraceStyles(accentStyle, result)
 
         // The mechanics are independent: any one of them can be off while the others work.
         if (settings.state.moveBraces) {
-            paintSites(settings, result, braceStyles)
+            paintMovedBraces(settings, result, braceStyles)
         }
         paintNestedMarkers(accentStyle, result)
-        paintRealBraces(accentStyle, result, braceStyles)
+        paintRealBraces(accentStyle, result, braceStyles, dimmedBraceOffsets(settings, result))
     }
 
     private fun scanOptions(settings: AllmanSettings): ScanOptions {
@@ -108,7 +107,7 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /** Brace offset to its styling. */
-    private fun buildAccents(
+    private fun buildBraceStyles(
         style: BraceAccentStyle,
         result: ScanResult,
     ): Map<Int, BraceStyle> {
@@ -126,7 +125,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         return styles
     }
 
-    private fun paintSites(
+    private fun paintMovedBraces(
         settings: AllmanSettings,
         result: ScanResult,
         braceStyles: Map<Int, BraceStyle>,
@@ -162,6 +161,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         style: BraceAccentStyle,
         result: ScanResult,
         braceStyles: Map<Int, BraceStyle>,
+        dimmedBraces: Set<Int>,
     ) {
         val documentLength = editor.document.textLength
 
@@ -174,7 +174,7 @@ class AllmanController(private val editor: Editor) : Disposable {
                 continue
             }
 
-            if (!isDimmed(result, accent)) {
+            if (accent.offset !in dimmedBraces) {
                 addHighlighter(
                     accent.offset,
                     accent.offset + 1,
@@ -238,7 +238,7 @@ class AllmanController(private val editor: Editor) : Disposable {
             BlockLabelRenderer(
                 prefixText = "",
                 prefixColor = color,
-                labelText = NESTED_MARKER_TEXT,
+                labelText = BraceAccentStyle.NESTED_MARKER_TEXT,
                 labelColor = color,
                 leadingSpaces = 0,
                 trailingSpaces = 1,
@@ -266,14 +266,15 @@ class AllmanController(private val editor: Editor) : Disposable {
             shadowColor,
             braceStyle.shadowOffsetX,
             braceStyle.shadowOffsetY,
+            braceStyle.attributes.fontType,
         )
         ownHighlighters.add(highlighter)
     }
 
     private fun addLabel(accent: BraceAccent, style: BraceAccentStyle, braceStyle: BraceStyle) {
         val prefixText: String
-        if (style.isNestedMarker(accent)) {
-            prefixText = "$NESTED_MARKER_TEXT "
+        if (style.marksAsNested(accent)) {
+            prefixText = BraceAccentStyle.NESTED_MARKER_TEXT + " "
         } else {
             prefixText = ""
         }
@@ -295,20 +296,36 @@ class AllmanController(private val editor: Editor) : Disposable {
         }
     }
 
-    private fun isDimmed(result: ScanResult, accent: BraceAccent): Boolean {
-        val settings = AllmanSettings.getInstance()
+    /**
+     * The braces the move mechanic dimmed, so accenting can leave them alone.
+     *
+     * Collected once per refresh rather than asked per brace: walking every site for every
+     * accent is O(accents x sites), which on a large file is millions of comparisons on the
+     * EDT for a single keystroke. Only brace offsets are kept, so the set stays small however
+     * much text is dimmed.
+     */
+    private fun dimmedBraceOffsets(settings: AllmanSettings, result: ScanResult): Set<Int> {
         if (!settings.state.moveBraces) {
-            return false
+            return emptySet()
         }
         if (!settings.state.dimOriginal) {
-            return false
+            return emptySet()
         }
+
+        val braceOffsets = HashSet<Int>(result.accents.size)
+        for (accent in result.accents) {
+            braceOffsets.add(accent.offset)
+        }
+
+        val dimmed = HashSet<Int>()
         for (site in result.sites) {
-            if (accent.offset >= site.dimStart && accent.offset < site.dimEnd) {
-                return true
+            for (offset in site.dimStart until site.dimEnd) {
+                if (braceOffsets.contains(offset)) {
+                    dimmed.add(offset)
+                }
             }
         }
-        return false
+        return dimmed
     }
 
     private fun addHighlighter(
@@ -355,8 +372,11 @@ class AllmanController(private val editor: Editor) : Disposable {
             }
         }
 
-        val balance = settings.state.dimPercent.coerceIn(0, MAX_PERCENT) / MAX_PERCENT.toDouble()
-        return ColorUtil.mix(scheme.defaultForeground, scheme.defaultBackground, balance)
+        return ColorBalance.mix(
+            scheme.defaultForeground,
+            scheme.defaultBackground,
+            settings.state.dimPercent,
+        )
     }
 
     private fun clear() {
@@ -402,7 +422,8 @@ class AllmanController(private val editor: Editor) : Disposable {
 
     companion object {
         private const val REFRESH_DELAY_MS = 200
-        private const val IMMEDIATE_DELAY_MS = 0
+        /** Also used by the service when a settings change has to show up at once. */
+        const val IMMEDIATE_DELAY_MS = 0
 
         /** How far above the syntax highlighting the dimming highlighter sits. */
         private const val DIM_LAYER_OFFSET = 100
@@ -413,13 +434,8 @@ class AllmanController(private val editor: Editor) : Disposable {
         /** The shadow paints before the text; the layer only keeps it out of others' way. */
         private const val SHADOW_LAYER_OFFSET = 80
 
-        private const val MAX_PERCENT = 100
-
         /** Gap after the brace so the end-of-block label does not stick to it. */
         private const val LABEL_LEADING_SPACES = 2
-
-        /** What marks a nested block, both before its declaration and on its own label. */
-        private const val NESTED_MARKER_TEXT = "nest"
 
         /** The scanner is linear, but a full timed rescan of a huge file is pointless. */
         private const val MAX_FILE_CHARS = 2_000_000

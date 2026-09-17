@@ -6,6 +6,7 @@ import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.markup.CustomHighlighterRenderer
 import com.intellij.openapi.editor.markup.RangeHighlighter
 import java.awt.Color
+import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
 
@@ -20,6 +21,13 @@ class BraceShadowRenderer(
     private val shadowColor: Color,
     private val offsetX: Int,
     private val offsetY: Int,
+
+    /**
+     * The weight of the brace this shadow sits under, as [java.awt.Font] defines it. Drawing a
+     * bold shadow under a plain glyph leaves a silhouette wider than the glyph itself, which
+     * reads as a smear rather than as depth.
+     */
+    private val fontType: Int,
 ) : CustomHighlighterRenderer {
 
     override fun paint(editor: Editor, highlighter: RangeHighlighter, graphics: Graphics) {
@@ -42,7 +50,7 @@ class BraceShadowRenderer(
             UISettings.setupAntialiasing(graphics)
         }
 
-        val font = editor.colorsScheme.getFont(EditorFontType.BOLD)
+        val font = shadowFont(editor)
         graphics.font = font
         graphics.color = shadowColor
 
@@ -52,5 +60,12 @@ class BraceShadowRenderer(
         val baseline = point.y + (lineHeight + metrics.ascent - metrics.descent) / 2
 
         graphics.drawString(brace, point.x + offsetX, baseline + offsetY)
+    }
+
+    private fun shadowFont(editor: Editor): Font {
+        if (fontType == Font.BOLD) {
+            return editor.colorsScheme.getFont(EditorFontType.BOLD)
+        }
+        return editor.colorsScheme.getFont(EditorFontType.PLAIN)
     }
 }

@@ -77,7 +77,7 @@ class BraceAccentStyle(
             shadowOffsetX = config.shadowOffsetX,
             shadowOffsetY = config.shadowOffsetY,
             labelText = labelText(accent),
-            labelColor = towardsGrey(braceColor, config.labelGreyPercent),
+            labelColor = ColorBalance.towardsGrey(braceColor, config.labelGreyPercent),
         )
         cache[cacheKey] = style
         return style
@@ -93,13 +93,13 @@ class BraceAccentStyle(
             return false
         }
         val config = settings.accentFor(accent.kind)
-        if (config == null || !config.label) {
+        if (config == null || !config.showLabel) {
             return false
         }
         if (labelText(accent).isEmpty()) {
             return false
         }
-        if (isNestedMarker(accent)) {
+        if (marksAsNested(accent)) {
             return true
         }
         return accent.spannedLines >= config.labelMinLines
@@ -113,11 +113,11 @@ class BraceAccentStyle(
         if (!accent.isOpening) {
             return false
         }
-        if (!isNestedMarker(accent)) {
+        if (!marksAsNested(accent)) {
             return false
         }
         val config = settings.accentFor(accent.kind)
-        return config != null && config.label
+        return config != null && config.showLabel
     }
 
     /**
@@ -127,7 +127,7 @@ class BraceAccentStyle(
      * switched off, so both call sites (the label prefix and the declaration-line marker) go
      * quiet together.
      */
-    fun isNestedMarker(accent: BraceAccent): Boolean {
+    fun marksAsNested(accent: BraceAccent): Boolean {
         if (!settings.state.nestedMarkerEnabled) {
             return false
         }
@@ -144,7 +144,7 @@ class BraceAccentStyle(
         val keywordColor = scheme.getAttributes(DefaultLanguageHighlighterColors.KEYWORD)
             ?.foregroundColor
             ?: scheme.defaultForeground
-        return towardsGrey(keywordColor, settings.state.nestedLabelGreyPercent)
+        return ColorBalance.towardsGrey(keywordColor, settings.state.nestedLabelGreyPercent)
     }
 
     /**
@@ -218,30 +218,22 @@ class BraceAccentStyle(
             target = Color.BLACK
             percent = lightPercent
         }
-        return ColorUtil.mix(base, target, balance(percent))
+        return ColorBalance.mix(base, target, percent)
     }
 
-    /**
-     * The shadow runs from the background towards grey rather than towards black: grey is darker
-     * than a light background and lighter than a dark one, so one setting works in both themes.
-     */
+    /** The shadow starts from the background, so it reads as depth rather than as a second glyph. */
     private fun shadowColor(percent: Int): Color {
-        val background = editor.colorsScheme.defaultBackground
-        return ColorUtil.mix(background, Color.GRAY, balance(percent))
+        return ColorBalance.towardsGrey(editor.colorsScheme.defaultBackground, percent)
     }
 
-    private fun towardsGrey(base: Color, percent: Int): Color {
-        return ColorUtil.mix(base, Color.GRAY, balance(percent))
-    }
-
-    private fun balance(percent: Int): Double {
-        return percent.coerceIn(0, MAX_PERCENT) / MAX_PERCENT.toDouble()
-    }
-
-    private companion object {
-        const val MAX_PERCENT = 100
+    companion object {
+        /**
+         * What a nested block is marked with, before its declaration and on its own label.
+         * It lives here rather than with the painter: the decision to show it is made here too.
+         */
+        const val NESTED_MARKER_TEXT = "nest"
 
         /** Greek lowercase lambda, standing in for `fun` on a lambda's own label. */
-        const val LAMBDA_SYMBOL = "λ"
+        private const val LAMBDA_SYMBOL = "λ"
     }
 }

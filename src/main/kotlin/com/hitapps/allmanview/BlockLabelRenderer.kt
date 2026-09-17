@@ -1,6 +1,7 @@
 package com.hitapps.allmanview
 
 import com.intellij.ide.ui.UISettings
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorCustomElementRenderer
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorFontType
@@ -31,10 +32,17 @@ class BlockLabelRenderer(
     private val trailingSpaces: Int,
 ) : EditorCustomElementRenderer {
 
+    /**
+     * Measured with the very font [paint] draws with, not by counting columns: the label is
+     * italic, and an italic advance is not promised to match the width of a plain space even
+     * in a monospaced scheme. Counting columns would leave the tail clipped by a few pixels.
+     */
     override fun calcWidthInPixels(inlay: Inlay<*>): Int {
-        val columnWidth = EditorUtil.getSpaceWidth(Font.PLAIN, inlay.editor)
-        val totalColumns = leadingSpaces + prefixText.length + labelText.length + trailingSpaces
-        return totalColumns * columnWidth
+        val editor = inlay.editor
+        val metrics = editor.contentComponent.getFontMetrics(labelFont(editor))
+        val gapWidth = (leadingSpaces + trailingSpaces) * EditorUtil.getSpaceWidth(Font.PLAIN, editor)
+
+        return gapWidth + metrics.stringWidth(prefixText) + metrics.stringWidth(labelText)
     }
 
     override fun paint(
@@ -48,7 +56,7 @@ class BlockLabelRenderer(
             UISettings.setupAntialiasing(graphics)
         }
 
-        val font = editor.colorsScheme.getFont(EditorFontType.ITALIC)
+        val font = labelFont(editor)
         graphics.font = font
 
         val metrics = graphics.getFontMetrics(font)
@@ -56,14 +64,19 @@ class BlockLabelRenderer(
         val baseline = targetRegion.y + (lineHeight + metrics.ascent - metrics.descent) / 2
         val columnWidth = EditorUtil.getSpaceWidth(Font.PLAIN, editor)
 
-        var x = targetRegion.x + leadingSpaces * columnWidth
+        var currentX = targetRegion.x + leadingSpaces * columnWidth
         if (prefixText.isNotEmpty()) {
             graphics.color = prefixColor
-            graphics.drawString(prefixText, x, baseline)
-            x += prefixText.length * columnWidth
+            graphics.drawString(prefixText, currentX, baseline)
+            currentX += metrics.stringWidth(prefixText)
         }
 
         graphics.color = labelColor
-        graphics.drawString(labelText, x, baseline)
+        graphics.drawString(labelText, currentX, baseline)
+    }
+
+    /** Italic, so a label never reads as part of the code it sits next to. */
+    private fun labelFont(editor: Editor): Font {
+        return editor.colorsScheme.getFont(EditorFontType.ITALIC)
     }
 }
