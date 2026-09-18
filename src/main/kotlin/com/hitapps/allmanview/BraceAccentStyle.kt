@@ -155,6 +155,22 @@ class BraceAccentStyle(
     }
 
     /**
+     * `"[N]"` when [accent] has a sibling ordinal to show and the setting is on, `""` otherwise.
+     * No trailing space: both call sites -- the declaration-line marker and the end-of-block
+     * label's prefix -- join it with whatever `nest` text follows, exactly as they already join
+     * that text with the real label.
+     */
+    fun siblingOrdinalText(accent: BraceAccent): String {
+        if (!settings.state.siblingNumberingEnabled) {
+            return ""
+        }
+        if (accent.siblingOrdinal <= 0) {
+            return ""
+        }
+        return "[" + accent.siblingOrdinal + "]"
+    }
+
+    /**
      * The colour actually painted at [offset], falling back to the scheme's plain keyword
      * colour when there is no real position to sample or nothing was sampled there. Sampling
      * first is what makes a marker or a namespace label follow the editor's own dimming of a

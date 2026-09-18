@@ -31,19 +31,41 @@ import java.awt.Color
  * where it is and is dimmed by highlighting, while phantom lines are block inlays. That is
  * why there are no clashes with ReSharper's folding and no caret being pushed around while
  * typing.
+ *
+ * The two mechanics redraw on two separate timers, not one: see [scheduleMove], [scheduleAccent]
+ * and the class doc on [MOVE_REFRESH_DELAY_MS] for why, and [moveHighlighters]/[accentHighlighters]
+ * for how each keeps its own decorations so redrawing one never touches the other's.
  */
 class AllmanController(private val editor: Editor) : Disposable {
 
-    private val ownHighlighters = ArrayList<RangeHighlighter>()
-    private val inlays = ArrayList<Inlay<*>>()
-    private val refreshAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
+    /** The move mechanic's own highlighters (the dimming of text that visually moved down). */
+    private val moveHighlighters = ArrayList<RangeHighlighter>()
+
+    /** The move mechanic's own inlays (the phantom lines themselves). */
+    private val moveInlays = ArrayList<Inlay<*>>()
+
+    /** The colour mechanic's own highlighters (brace colour and shadow). */
+    private val accentHighlighters = ArrayList<RangeHighlighter>()
+
+    /** The colour mechanic's own inlays (declaration-line markers and end-of-block labels). */
+    private val accentInlays = ArrayList<Inlay<*>>()
+
+    private val moveAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
+    private val accentAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
 
     init {
         editor.putUserData(KEY, this)
         editor.document.addDocumentListener(
             object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
-                    schedule()
+                    // The move mechanic is what keeps the file reading as valid Allman style
+                    // while typing, so it stays on the short timer. The colour mechanic draws
+                    // strictly more decorations per accent on top of that -- colour, shadow,
+                    // label, the nest and sibling-ordinal markers -- so it is the one worth
+                    // delaying: a longer pause before it redraws means fewer full rebuilds of
+                    // the more expensive half while someone is still actively typing.
+                    scheduleMove(MOVE_REFRESH_DELAY_MS)
+                    scheduleAccent(ACCENT_REFRESH_DELAY_MS)
                 }
             },
             this,
@@ -51,33 +73,85 @@ class AllmanController(private val editor: Editor) : Disposable {
         schedule(IMMEDIATE_DELAY_MS)
     }
 
-    fun schedule(delayMs: Int = REFRESH_DELAY_MS) {
-        if (editor.isDisposed) {
-            return
-        }
-        refreshAlarm.cancelAllRequests()
-        refreshAlarm.addRequest({ refresh() }, delayMs)
+    /**
+     * Refreshes both mechanics at the same delay. For an external trigger -- a settings change,
+     * a newly opened editor -- where they should show up together instead of staggered. Typing
+     * itself never calls this; the document listener above schedules the two halves separately.
+     */
+    fun schedule(delayMs: Int = MOVE_REFRESH_DELAY_MS) {
+        scheduleMove(delayMs)
+        scheduleAccent(delayMs)
     }
 
-    private fun refresh() {
+    private fun scheduleMove(delayMs: Int) {
         if (editor.isDisposed) {
             return
         }
-        clear()
+        moveAlarm.cancelAllRequests()
+        moveAlarm.addRequest({ refreshMove() }, delayMs)
+    }
+
+    private fun scheduleAccent(delayMs: Int) {
+        if (editor.isDisposed) {
+            return
+        }
+        accentAlarm.cancelAllRequests()
+        accentAlarm.addRequest({ refreshAccent() }, delayMs)
+    }
+
+    /** The phantom lines and the dimming of the text they stand in for. */
+    private fun refreshMove() {
+        if (editor.isDisposed) {
+            return
+        }
+        clearMove()
+
+        val settings = AllmanSettings.getInstance()
+        if (!settings.state.enabled || !settings.state.moveBraces) {
+            return
+        }
+        val flavor = flavorFor() ?: return
+        if (editor.document.textLength > MAX_FILE_CHARS) {
+            return
+        }
+
+        val outcome = scanNow(settings, flavor)
+        paintMovedBraces(settings, outcome.result, outcome.braceStyles)
+    }
+
+    /** Brace colour and shadow, the end-of-block label, and the declaration-line markers. */
+    private fun refreshAccent() {
+        if (editor.isDisposed) {
+            return
+        }
+        clearAccent()
 
         val settings = AllmanSettings.getInstance()
         if (!settings.state.enabled) {
             return
         }
-
-        val flavor = flavorFor()
-        if (flavor == null) {
-            return
-        }
+        val flavor = flavorFor() ?: return
         if (editor.document.textLength > MAX_FILE_CHARS) {
             return
         }
 
+        val outcome = scanNow(settings, flavor)
+        paintDeclarationLineMarkers(outcome.accentStyle, outcome.result)
+        paintRealBraces(
+            outcome.accentStyle,
+            outcome.result,
+            outcome.braceStyles,
+            dimmedBraceOffsets(settings, outcome.result),
+        )
+    }
+
+    /**
+     * One scan plus the per-brace styling both halves paint from. Computing it is pure text
+     * processing with no editor calls in it, so each half doing this independently on its own
+     * timer costs nothing next to the highlighter/inlay churn the two timers exist to keep
+     * apart -- see the class doc on [MOVE_REFRESH_DELAY_MS].
+     */
+    private fun scanNow(settings: AllmanSettings, flavor: Flavor): ScanOutcome {
         val result = BraceScanner(
             editor.document.immutableCharSequence,
             flavor,
@@ -86,14 +160,14 @@ class AllmanController(private val editor: Editor) : Disposable {
 
         val accentStyle = BraceAccentStyle(editor, settings)
         val braceStyles = buildBraceStyles(accentStyle, result)
-
-        // The mechanics are independent: any one of them can be off while the others work.
-        if (settings.state.moveBraces) {
-            paintMovedBraces(settings, result, braceStyles)
-        }
-        paintNestedMarkers(accentStyle, result)
-        paintRealBraces(accentStyle, result, braceStyles, dimmedBraceOffsets(settings, result))
+        return ScanOutcome(result, accentStyle, braceStyles)
     }
+
+    private data class ScanOutcome(
+        val result: ScanResult,
+        val accentStyle: BraceAccentStyle,
+        val braceStyles: Map<Int, BraceStyle>,
+    )
 
     private fun scanOptions(settings: AllmanSettings): ScanOptions {
         return ScanOptions(
@@ -144,7 +218,7 @@ class AllmanController(private val editor: Editor) : Disposable {
                 continue
             }
             if (dimAttributes != null) {
-                addHighlighter(site.dimStart, site.dimEnd, DIM_LAYER_OFFSET, dimAttributes)
+                addHighlighter(site.dimStart, site.dimEnd, DIM_LAYER_OFFSET, dimAttributes, moveHighlighters)
             }
             addPhantomLines(site, braceStyles)
         }
@@ -180,6 +254,7 @@ class AllmanController(private val editor: Editor) : Disposable {
                     accent.offset + 1,
                     ACCENT_LAYER_OFFSET,
                     braceStyle.attributes,
+                    accentHighlighters,
                 )
                 addShadow(accent.offset, braceStyle)
             }
@@ -191,15 +266,22 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /**
-     * The `nest` marker before a nested block's own declaration line, in the same colour as
-     * the prefix on its end-of-block label. Placed right after the line's indent, so the real
-     * declaration is pushed right rather than the marker landing in the margin.
+     * The declaration-line markers in front of a block's own header: the sibling ordinal
+     * `[N]`, the `nest` marker, or both together with `[N]` first, in the same colour as the
+     * prefix on the block's end-of-block label. Placed right after the line's indent, so the
+     * real declaration is pushed right rather than the marker landing in the margin.
      */
-    private fun paintNestedMarkers(style: BraceAccentStyle, result: ScanResult) {
+    private fun paintDeclarationLineMarkers(style: BraceAccentStyle, result: ScanResult) {
         val documentLength = editor.document.textLength
 
         for (accent in result.accents) {
-            if (!style.needsNestedMarker(accent)) {
+            // Only the opening side has a declaration line to sit in front of; both accents of
+            // a numbered block otherwise carry the same ordinal, which would draw it twice.
+            if (!accent.isOpening) {
+                continue
+            }
+            val markerText = declarationLineMarkerText(style, accent)
+            if (markerText.isEmpty()) {
                 continue
             }
             val headerOffset = headerOffsetOf(accent)
@@ -207,8 +289,25 @@ class AllmanController(private val editor: Editor) : Disposable {
                 continue
             }
             val contentOffset = contentStartOffset(headerOffset)
-            addNestedMarker(contentOffset, style.nestedMarkerColor(contentOffset))
+            addDeclarationLineMarker(contentOffset, markerText, style.nestedMarkerColor(contentOffset))
         }
+    }
+
+    /**
+     * `"[N] nest"`, `"[N]"`, `"nest"`, or `""`: the sibling ordinal and the `nest` marker, in
+     * that order, for the declaration line -- the ordinal is shown even when the block is not
+     * nested, since a top-level namespace or type can still have numbered siblings.
+     */
+    private fun declarationLineMarkerText(style: BraceAccentStyle, accent: BraceAccent): String {
+        val ordinalText = style.siblingOrdinalText(accent)
+        val nestText = if (style.needsNestedMarker(accent)) BraceAccentStyle.NESTED_MARKER_TEXT else ""
+        if (ordinalText.isEmpty()) {
+            return nestText
+        }
+        if (nestText.isEmpty()) {
+            return ordinalText
+        }
+        return "$ordinalText $nestText"
     }
 
     /** The declaration line, not the brace line: a multi-line signature starts well above it. */
@@ -232,21 +331,21 @@ class AllmanController(private val editor: Editor) : Disposable {
         return end
     }
 
-    private fun addNestedMarker(offset: Int, color: Color) {
+    private fun addDeclarationLineMarker(offset: Int, text: String, color: Color) {
         val inlay = editor.inlayModel.addInlineElement(
             offset,
             /* relatesToPrecedingText = */ false,
             BlockLabelRenderer(
                 prefixText = "",
                 prefixColor = color,
-                labelText = BraceAccentStyle.NESTED_MARKER_TEXT,
+                labelText = text,
                 labelColor = color,
                 leadingSpaces = 0,
                 trailingSpaces = 1,
             ),
         )
         if (inlay != null) {
-            inlays.add(inlay)
+            accentInlays.add(inlay)
         }
     }
 
@@ -269,16 +368,11 @@ class AllmanController(private val editor: Editor) : Disposable {
             braceStyle.shadowOffsetY,
             braceStyle.attributes.fontType,
         )
-        ownHighlighters.add(highlighter)
+        accentHighlighters.add(highlighter)
     }
 
     private fun addLabel(accent: BraceAccent, style: BraceAccentStyle, braceStyle: BraceStyle) {
-        val prefixText: String
-        if (style.marksAsNested(accent)) {
-            prefixText = BraceAccentStyle.NESTED_MARKER_TEXT + " "
-        } else {
-            prefixText = ""
-        }
+        val prefixText = endOfBlockLabelPrefix(style, accent)
 
         val inlay = editor.inlayModel.addInlineElement(
             accent.offset + 1,
@@ -296,8 +390,23 @@ class AllmanController(private val editor: Editor) : Disposable {
             ),
         )
         if (inlay != null) {
-            inlays.add(inlay)
+            accentInlays.add(inlay)
         }
+    }
+
+    /**
+     * `"[N] nest "`, `"[N] "`, `"nest "`, or `""`: the sibling ordinal and the `nest` marker, in
+     * that order, sharing one colour and one trailing space before the real label -- the same
+     * ordering as [declarationLineMarkerText] uses on the opening side, so a block reads the
+     * same number in both places.
+     */
+    private fun endOfBlockLabelPrefix(style: BraceAccentStyle, accent: BraceAccent): String {
+        val ordinalText = style.siblingOrdinalText(accent)
+        val nestText = if (style.marksAsNested(accent)) BraceAccentStyle.NESTED_MARKER_TEXT else ""
+        if (ordinalText.isEmpty() && nestText.isEmpty()) {
+            return ""
+        }
+        return listOf(ordinalText, nestText).filter { it.isNotEmpty() }.joinToString(" ") + " "
     }
 
     /**
@@ -337,6 +446,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         end: Int,
         layerOffset: Int,
         attributes: TextAttributes,
+        highlighters: MutableList<RangeHighlighter>,
     ) {
         val highlighter = editor.markupModel.addRangeHighlighter(
             start,
@@ -346,7 +456,7 @@ class AllmanController(private val editor: Editor) : Disposable {
             attributes,
             HighlighterTargetArea.EXACT_RANGE,
         )
-        ownHighlighters.add(highlighter)
+        highlighters.add(highlighter)
     }
 
     private fun addPhantomLines(site: PhantomSite, braceStyles: Map<Int, BraceStyle>) {
@@ -358,7 +468,7 @@ class AllmanController(private val editor: Editor) : Disposable {
             PhantomLineRenderer(site.indent, site.phantomLines, braceStyles),
         )
         if (inlay != null) {
-            inlays.add(inlay)
+            moveInlays.add(inlay)
         }
     }
 
@@ -383,15 +493,27 @@ class AllmanController(private val editor: Editor) : Disposable {
         )
     }
 
-    private fun clear() {
+    private fun clearMove() {
+        removeHighlighters(moveHighlighters)
+        disposeInlays(moveInlays)
+    }
+
+    private fun clearAccent() {
+        removeHighlighters(accentHighlighters)
+        disposeInlays(accentInlays)
+    }
+
+    private fun removeHighlighters(highlighters: MutableList<RangeHighlighter>) {
         val markupModel = editor.markupModel
-        for (highlighter in ownHighlighters) {
+        for (highlighter in highlighters) {
             if (highlighter.isValid) {
                 markupModel.removeHighlighter(highlighter)
             }
         }
-        ownHighlighters.clear()
+        highlighters.clear()
+    }
 
+    private fun disposeInlays(inlays: MutableList<Inlay<*>>) {
         for (inlay in inlays) {
             Disposer.dispose(inlay)
         }
@@ -420,13 +542,32 @@ class AllmanController(private val editor: Editor) : Disposable {
     override fun dispose() {
         editor.putUserData(KEY, null)
         if (!editor.isDisposed) {
-            clear()
+            clearMove()
+            clearAccent()
         }
     }
 
     companion object {
-        private const val REFRESH_DELAY_MS = 200
-        /** Also used by the service when a settings change has to show up at once. */
+        /**
+         * How long a pause in typing has to be before the move mechanic redraws. Short, because
+         * this is the mechanic that keeps the file reading as Allman style at all -- the file
+         * would otherwise flash back to its real, non-Allman brace placement while someone is
+         * still typing.
+         */
+        private const val MOVE_REFRESH_DELAY_MS = 200
+
+        /**
+         * How long a pause before the colour mechanic redraws -- noticeably longer than
+         * [MOVE_REFRESH_DELAY_MS]. It is pure decoration on top of what the move mechanic
+         * already drew, and it touches strictly more highlighters and inlays per accent
+         * (colour, shadow, the end-of-block label, the nest and sibling-ordinal markers), so it
+         * is the more expensive half to rebuild on every short pause. Delaying it further means
+         * a fast typing burst rebuilds it only once it actually stops, instead of once per
+         * pause in the middle of it.
+         */
+        private const val ACCENT_REFRESH_DELAY_MS = 600
+
+        /** Also used by the service when a settings change has to show up at once, for both. */
         const val IMMEDIATE_DELAY_MS = 0
 
         /** How far above the syntax highlighting the dimming highlighter sits. */

@@ -1003,4 +1003,126 @@ class BraceScannerTest {
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
         assertEquals("Bind", accentName(src, accents(src).first()))
     }
+
+    // --- numbering a container's type/namespace siblings: [1], [2], ... ---
+
+    @Test
+    fun `two namespaces at the top level are numbered one and two`() {
+        val src = "namespace Name1\n{\n}\nnamespace Name2\n{\n}\n"
+        val namespaces = accents(src).filter { it.kind == BlockKind.NAMESPACE && it.isOpening }
+            .sortedBy { it.offset }
+        assertEquals(listOf(1, 2), namespaces.map { it.siblingOrdinal })
+    }
+
+    @Test
+    fun `the opening and closing brace of a numbered block share the same ordinal`() {
+        val src = "namespace Name1\n{\n}\nnamespace Name2\n{\n}\n"
+        val namespaceAccents = accents(src).filter { it.kind == BlockKind.NAMESPACE }.sortedBy { it.offset }
+        assertEquals(4, namespaceAccents.size)
+        val (openName1, closeName1, openName2, closeName2) = namespaceAccents
+        assertEquals(1, openName1.siblingOrdinal)
+        assertEquals(1, closeName1.siblingOrdinal)
+        assertEquals(2, openName2.siblingOrdinal)
+        assertEquals(2, closeName2.siblingOrdinal)
+    }
+
+    @Test
+    fun `a container with only one type or namespace child is not numbered`() {
+        val src = "namespace Only\n{\n    class Single\n    {\n    }\n}\n"
+        assertTrue(accents(src).all { it.siblingOrdinal == 0 })
+    }
+
+    @Test
+    fun `an interface, an enum and a class in the same namespace are numbered in order`() {
+        val src = "" +
+            "namespace Name2\n" +
+            "{\n" +
+            "    interface IThing\n" +
+            "    {\n" +
+            "    }\n" +
+            "    enum EEEE\n" +
+            "    {\n" +
+            "    }\n" +
+            "    class CLASS\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val children = accents(src)
+            .filter { it.isOpening && it.kind != BlockKind.NAMESPACE }
+            .sortedBy { it.offset }
+        assertEquals(listOf(1, 2, 3), children.map { it.siblingOrdinal })
+    }
+
+    @Test
+    fun `a single nested type among several functions is still not numbered`() {
+        val src = "" +
+            "class CLASS\n" +
+            "{\n" +
+            "    void F()\n" +
+            "    {\n" +
+            "    }\n" +
+            "    class Nested\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        assertTrue(accents(src).none { it.kind == BlockKind.FUNCTION && it.siblingOrdinal != 0 })
+        val nested = accents(src).single { it.kind == BlockKind.TYPE && it.isOpening && it.isNested }
+        assertEquals(0, nested.siblingOrdinal)
+    }
+
+    @Test
+    fun `functions interleaved with two nested types do not break the numbering`() {
+        val src = "" +
+            "class Outer\n" +
+            "{\n" +
+            "    void Foo()\n" +
+            "    {\n" +
+            "    }\n" +
+            "    class Inner1\n" +
+            "    {\n" +
+            "    }\n" +
+            "    void Bar()\n" +
+            "    {\n" +
+            "    }\n" +
+            "    class Inner2\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val nested = accents(src).filter { it.kind == BlockKind.TYPE && it.isOpening && it.isNested }
+            .sortedBy { it.offset }
+        assertEquals(listOf("Inner1", "Inner2"), nested.map { accentName(src, it) })
+        assertEquals(listOf(1, 2), nested.map { it.siblingOrdinal })
+        assertTrue(accents(src).none { it.kind == BlockKind.FUNCTION && it.siblingOrdinal != 0 })
+    }
+
+    @Test
+    fun `each container numbers its own children independently`() {
+        val src = "" +
+            "namespace App\n" +
+            "{\n" +
+            "    class Service\n" +
+            "    {\n" +
+            "        class Config\n" +
+            "        {\n" +
+            "        }\n" +
+            "        class State\n" +
+            "        {\n" +
+            "        }\n" +
+            "    }\n" +
+            "    class Repository\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        val topLevelChildren = accents(src)
+            .filter { it.isOpening && it.kind == BlockKind.TYPE && !it.isNested }
+            .sortedBy { it.offset }
+        assertEquals(listOf("Service", "Repository"), topLevelChildren.map { accentName(src, it) })
+        assertEquals(listOf(1, 2), topLevelChildren.map { it.siblingOrdinal })
+
+        val serviceChildren = accents(src)
+            .filter { it.isOpening && it.kind == BlockKind.TYPE && it.isNested }
+            .sortedBy { it.offset }
+        assertEquals(listOf("Config", "State"), serviceChildren.map { accentName(src, it) })
+        assertEquals(listOf(1, 2), serviceChildren.map { it.siblingOrdinal })
+    }
 }

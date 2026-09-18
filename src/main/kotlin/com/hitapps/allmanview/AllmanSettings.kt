@@ -74,6 +74,13 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
          */
         var nestedLabelGreyPercent: Int by property(50)
 
+        /**
+         * Master switch for numbering a container's type/namespace children `[1]`, `[2]`, ...
+         * Independent of [nestedMarkerEnabled]: a top-level block can be numbered without ever
+         * being "nested", and a nested one can carry both markers at once.
+         */
+        var siblingNumberingEnabled: Boolean by property(true)
+
         // --- type braces: class, struct, interface, enum, record ---
 
         var accentTypes: Boolean by property(true)

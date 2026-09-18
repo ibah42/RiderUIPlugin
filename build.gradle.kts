@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.hitapps"
-version = "1.4.1"
+version = "1.5.1"
 
 repositories {
     mavenCentral()

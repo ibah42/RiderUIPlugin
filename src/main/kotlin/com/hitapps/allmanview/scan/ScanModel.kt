@@ -62,6 +62,9 @@ enum class BlockKind {
  * @param isLambda the block is a lambda or an anonymous delegate rather than a declared function
  * @param headerOffset offset where the declaration itself starts, which for a multi-line
  *   signature is well before the brace; -1 when the block has no header
+ * @param siblingOrdinal 1-based position among this block's type/namespace siblings in the same
+ *   container -- the file, or the nearest enclosing namespace, type or function -- once that
+ *   container has two or more of them; 0 when there is nothing to number
  */
 data class BraceAccent(
     val offset: Int,
@@ -74,6 +77,7 @@ data class BraceAccent(
     val isNested: Boolean = false,
     val isLambda: Boolean = false,
     val headerOffset: Int = -1,
+    val siblingOrdinal: Int = 0,
 )
 
 /** What exactly to split. */

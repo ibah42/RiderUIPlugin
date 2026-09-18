@@ -18,13 +18,15 @@ import com.intellij.ui.dsl.builder.rows
 import com.intellij.ui.dsl.builder.selected
 
 /**
- * The panel has two independent halves, each behind its own master checkbox.
+ * The panel has three independent sections, each behind its own master checkbox.
  *
  * "Move braces down" owns the phantom lines and the dimming of the text they stand in for.
- * "Accent braces" owns the colour, the weight, the shadow and the end-of-block label of the
- * three kinds of block that get one -- types, functions and namespaces -- plus the nested
- * marker shared by all three. Turning one master off leaves the other running; the topmost
- * checkbox turns off the plugin as a whole.
+ * "Sibling numbering" owns the `[1]`, `[2]`, ... marker on a container's type/namespace
+ * children; it has nothing to number while the child's own kind is not being recognised below,
+ * under "Accent braces". "Accent braces" owns the colour, the weight, the shadow and the
+ * end-of-block label of the three kinds of block that get one -- types, functions and
+ * namespaces -- plus the nested marker shared by all three. Turning one master off leaves the
+ * others running; the topmost checkbox turns off the plugin as a whole.
  *
  * Every subsection below a master checkbox is a bold, borderless heading (`label(...).bold()`)
  * followed by a `rowsRange { ... }.enabledIf(...)`: a row disabled by an ancestor stays disabled
@@ -42,12 +44,27 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                 pluginEnabled = checkBox("Allman View enabled")
                     .bindSelected(config::enabled)
                     .comment(
-                        "The master switch for both mechanics below. With it off the editor " +
+                        "The master switch for everything below. With it off the editor " +
                             "shows the file exactly as it is on disk.",
                     )
             }
 
-            // Both groups grey out with the master switch, so it is obvious what it controls.
+            group("Sibling numbering") {
+                row {
+                    checkBox("Number a container's type and namespace children")
+                        .bindSelected(config::siblingNumberingEnabled)
+                        .comment(
+                            "[1], [2], ... before each class, struct, interface, enum, " +
+                                "record or namespace directly inside the same file, " +
+                                "namespace, type or function, once that container has two " +
+                                "or more of them. A lone child, or a function, is never " +
+                                "numbered. Needs the child's own kind turned on below, " +
+                                "under \"Accent braces\".",
+                        )
+                }
+            }.enabledIf(pluginEnabled.selected)
+
+            // Every group below greys out with the master switch, so it is obvious what it controls.
             group("Move braces down") {
                 lateinit var moveBraces: Cell<JBCheckBox>
                 row {

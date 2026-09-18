@@ -81,6 +81,22 @@ class BraceScanner(
     private val foundSites = ArrayList<PhantomSite>()
     private val foundAccents = ArrayList<BraceAccent>()
 
+    /**
+     * The [OpenBlock] behind each entry in [foundAccents], index-aligned with it. A
+     * [BraceAccent] is built before its block's final [OpenBlock.siblingOrdinal] is known, so
+     * this is what lets [finalizeSiblingOrdinals] patch that value in afterwards without
+     * re-scanning anything.
+     */
+    private val accentSourceBlocks = ArrayList<OpenBlock>()
+
+    /**
+     * Every container's direct type/namespace children, in the order they open, keyed by the
+     * container's own [OpenBlock] -- `null` for the file's top level. Read once, by
+     * [finalizeSiblingOrdinals], after the whole file has been scanned: a container's final
+     * child count is not known any earlier than that.
+     */
+    private val siblingsByContainer = HashMap<OpenBlock?, MutableList<OpenBlock>>()
+
     /** Stack of open `{`: a closing brace uses it to learn whose block it closes. */
     private val blockStack = ArrayDeque<OpenBlock>()
 
@@ -186,6 +202,7 @@ class BraceScanner(
             }
         }
         finishLine(textLength)
+        finalizeSiblingOrdinals()
         return ScanResult(foundSites, foundAccents)
     }
 
@@ -920,6 +937,8 @@ class BraceScanner(
         // once that is done does the block's body get its own fresh bracket scope.
         val block = classifyBlock(braceOffset)
         block.isNested = enclosesKind(block.kind)
+        block.parent = blockStack.lastOrNull()
+        registerSibling(block)
         blockStack.addLast(block)
         rememberAccent(braceOffset, block, isOpening = true, spannedLines = 0)
 
@@ -963,6 +982,7 @@ class BraceScanner(
                 headerOffset = block.headerOffset,
             ),
         )
+        accentSourceBlocks.add(block)
     }
 
     /**
@@ -981,6 +1001,44 @@ class BraceScanner(
             }
         }
         return false
+    }
+
+    /**
+     * Adds a type or namespace block to its container's sibling list, so
+     * [finalizeSiblingOrdinals] can number it once the container's final child count is known.
+     * A function, a lambda or anything else in [BlockKind] is never a sibling for this purpose,
+     * so it is never added and never counts towards the two-or-more threshold.
+     */
+    private fun registerSibling(block: OpenBlock) {
+        if (block.kind != BlockKind.TYPE && block.kind != BlockKind.NAMESPACE) {
+            return
+        }
+        siblingsByContainer.getOrPut(block.parent) { ArrayList() }.add(block)
+    }
+
+    /**
+     * Numbers every container's type/namespace children `[1]`, `[2]`, ... in the order they
+     * open, but only for a container with two or more of them: a single such child is not a
+     * sibling of anything and stays unmarked. Deferred to the very end of [scan], because a
+     * container's final child count is not known until its own closing brace -- or, for the
+     * file's top level, the end of the file -- has been reached.
+     */
+    private fun finalizeSiblingOrdinals() {
+        for (siblings in siblingsByContainer.values) {
+            if (siblings.size < 2) {
+                continue
+            }
+            for (index in siblings.indices) {
+                siblings[index].siblingOrdinal = index + 1
+            }
+        }
+
+        for (index in foundAccents.indices) {
+            val ordinal = accentSourceBlocks[index].siblingOrdinal
+            if (ordinal > 0) {
+                foundAccents[index] = foundAccents[index].copy(siblingOrdinal = ordinal)
+            }
+        }
     }
 
     private fun isAccented(kind: BlockKind): Boolean {

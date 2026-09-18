@@ -14,6 +14,17 @@ internal class OpenBlock(
 ) {
     /** Filled in when the block is pushed, so the closing brace reports the same value. */
     var isNested: Boolean = false
+
+    /** The block on top of the stack when this one was opened; null at the top of the file. */
+    var parent: OpenBlock? = null
+
+    /**
+     * 1-based position among [parent]'s type/namespace children, filled in by
+     * [BraceScanner.finalizeSiblingOrdinals] once the whole file has been scanned. Stays 0 --
+     * meaning "nothing to number" -- until then, and forever if [parent] never grows a second
+     * such child.
+     */
+    var siblingOrdinal: Int = 0
 }
 
 /**

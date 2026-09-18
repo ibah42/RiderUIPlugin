@@ -182,7 +182,8 @@ The order is:
    anywhere.
 2. Run the tests against the code that is actually on disk, not against your own copy.
 3. When a full build is unavailable, at least compile and sort the errors by kind, separating
-   "missing jars" from the real ones.
+   "missing jars" from the real ones. See "Verifying without a full build" below for the exact
+   recipe used in a sandboxed session with no Gradle/Maven access.
 4. Cover edge cases right away: string literals, comments, escaping, multi-line constructs,
    unbalanced input.
 
@@ -196,6 +197,32 @@ wrong.
 
 If an earlier piece of advice turned out to be wrong, say so in the first sentence and explain
 why. Do not blur it or bury it.
+
+### Verifying without a full build
+
+Gradle needs network access it may not have in a sandboxed session (Maven Central, the Gradle
+Plugin Portal and `services.gradle.org` have all been seen blocked by an agent proxy). Do not
+silently skip verification when that happens -- say so, then fall back to this:
+
+1. Copy `scan/*.kt` (the whole package -- it is a closed, IntelliJ-free unit) and the real
+   `scan/BraceScannerTest.kt` into a scratch folder outside the repo.
+2. Get a standalone `kotlinc` if one is not already on the machine. `github.com` and
+   `objects.githubusercontent.com` are reachable even when the usual dependency hosts are not --
+   download `kotlin-compiler-<version>.zip` straight from JetBrains' GitHub releases.
+3. JUnit4 itself is a Maven dependency and may be unreachable too. `org.junit.Test` is just an
+   annotation and `org.junit.Assert.assertEquals`/`assertTrue` are two static methods -- write
+   minimal stand-ins for both, compile the real, unmodified test file against them, and run its
+   `@Test` methods with a short reflection-based runner (find the annotated methods, invoke each
+   on a fresh instance, count passes and failures). This exercises the actual file on disk, not a
+   rewritten copy of it.
+4. For anything the tests do not already cover (a new bug report, a specific reported file), also
+   write a small throwaway `main()` that runs `BraceScanner` on the exact reported text and prints
+   every `BraceAccent`, then compare that by hand against the screenshot or the report.
+
+This verifies `scan/` for real. Everything outside it -- `AllmanController.kt`,
+`AllmanSettings.kt`, `AllmanConfigurable.kt`, `BraceAccentStyle.kt`, the renderers -- depends on
+the IntelliJ Platform and cannot be compiled this way. Review those by hand instead, and say
+plainly that they were not compiler-checked rather than implying they were.
 
 ---
 
@@ -216,6 +243,46 @@ Things that are easy to break:
 - **A dialect is only about string literals.** When adding a language, check whether it has
   `"""` blocks, raw strings or interpolation. Without that the scanner runs off inside a
   multi-line string.
+- **A container's type/namespace children can be numbered `[1]`, `[2]`, ...**
+  (`AllmanSettings.Config.siblingNumberingEnabled`). The scanner computes this itself, in
+  `BraceScanner`: `OpenBlock.parent` / `OpenBlock.siblingOrdinal` and `finalizeSiblingOrdinals()`,
+  deferred to the very end of `scan()` because a container's final child count -- needed to know
+  whether it even has "two or more" -- is not known until the container itself, or the file, has
+  been fully scanned. Reading `siblingOrdinal` off a `BraceAccent` produced mid-scan, rather than
+  from the finished `ScanResult`, would see 0 for every block. Only `BlockKind.TYPE`/`NAMESPACE`
+  ever count towards the threshold or get numbered; a function or a lambda never does.
+
+### Performance: two refresh timers, not one
+
+`AllmanController` redraws on two independent `Alarm`s, not one, because the two mechanics cost
+very different amounts to rebuild:
+
+- **Move** (`scheduleMove` / `refreshMove`, `MOVE_REFRESH_DELAY_MS`): the phantom lines and the
+  dimming of the real braces they stand in for. Short delay -- this is what keeps the file
+  reading as valid Allman style at all, so it has to stay responsive while typing.
+- **Accent** (`scheduleAccent` / `refreshAccent`, `ACCENT_REFRESH_DELAY_MS`): brace colour,
+  shadow, the end-of-block label, the `nest` marker and the sibling-ordinal `[N]` marker. Longer
+  delay on purpose -- it is pure decoration on top of what Move already drew, it touches more
+  highlighters and inlays per accent than Move does, and it is the one nobody notices lagging a
+  few hundred milliseconds behind, unlike Move.
+
+Each half keeps its own highlighter/inlay lists (`moveHighlighters`/`moveInlays` vs.
+`accentHighlighters`/`accentInlays`) and its own `clear*()`. That split is deliberate, not
+incidental: if Accent shared its list with Move, every short Move-timer tick would tear down and
+rebuild Accent's decorations too, defeating the point of giving it a longer timer. When adding a
+new kind of decoration, decide which half it belongs to -- does it move or dim a brace, or does
+it just decorate one that is already placed? -- and route it through that half's list. Do not
+introduce a third shared list "for convenience".
+
+`schedule(delayMs)`, the public entry point `AllmanService` calls on a settings change or a newly
+opened editor, still refreshes both halves at the same delay, so nothing looks stale right after
+an explicit trigger; only the document-changed listener staggers them.
+
+If a file is ever large enough that even the debounced full-file rebuild is felt, the next step
+is viewport-based painting -- a `VisibleAreaListener`, only materialising highlighters/inlays for
+the visible line range plus a margin, extending it as the user scrolls -- rather than lowering
+`MAX_FILE_CHARS`. That is a bigger change than the two-timer split and should not be built
+speculatively; nobody has needed it yet.
 
 ### Versions
 
