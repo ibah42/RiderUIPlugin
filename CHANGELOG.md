@@ -2,6 +2,27 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.8.0
+
+- Fixed: a closing brace could end up carrying a bare `[3]` and nothing else -- an ordinal with
+  nothing after it to say what it counted. It happened whenever a numbered block was shorter
+  than its kind's label length: the markers were assembled before the "does this block get a
+  label at all" question was asked, so the refusal dropped the name and left the number behind.
+- The rule behind it is now stated once instead of being an accident of ordering. A closing
+  brace names its block for one of three separate reasons, any one of which is enough: the
+  block is long (the per-kind label length), the block is nested inside one of its own kind, or
+  the block is numbered and the number is being repeated down there. The third reason is new,
+  and it is what makes the bare `[3]` impossible by construction -- repeating the number is now
+  itself a reason to repeat the name.
+- New setting, "Repeat [N] after the closing brace from this block length" (default 15 lines),
+  under "Sibling numbering". The two ends of a numbered block no longer share one rule: the
+  `[N]` in front of the declaration is always drawn, since the declaration explains it, while
+  the copy after the closing brace has to earn its place. Its default is well below the
+  per-kind label lengths (50 for types, 30 for functions) on purpose -- "which sibling is this"
+  becomes worth answering long before "what was this block called" does.
+- The per-kind "From this block length" spinners now say in the panel that nesting and numbering
+  can name a shorter block anyway, so the number in the spinner is not read as the whole story.
+
 ## 1.7.1
 
 - Fixed: an indexer (`public int this[int i]`) was not recognised as a block at all -- its body

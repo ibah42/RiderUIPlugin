@@ -50,8 +50,9 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
             }
 
             group("Sibling numbering") {
+                lateinit var siblingNumbering: Cell<JBCheckBox>
                 row {
-                    checkBox("Number a container's type and namespace children")
+                    siblingNumbering = checkBox("Number a container's type and namespace children")
                         .bindSelected(config::siblingNumberingEnabled)
                         .comment(
                             "[1], [2], ... before each class, struct, interface, enum, " +
@@ -62,10 +63,29 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                                 "under \"Accent braces\".",
                         )
                 }
-                row("\"[N]\" towards grey, %:") {
-                    spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::siblingGreyPercent)
-                        .comment("Based on the editor's keyword colour, like the other markers.")
-                }
+                rowsRange {
+                    row("Repeat \"[N]\" after the closing brace from this block length, lines:") {
+                        spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                            .bindIntValue(config::siblingNumberingEndOfBlockMinLines)
+                            .comment(
+                                "The [N] in front of the declaration is always drawn: the " +
+                                    "declaration is right next to it and explains it. The copy " +
+                                    "after the closing brace only pays for itself once the " +
+                                    "opening line has scrolled out of view, so it has a length " +
+                                    "of its own -- normally shorter than the per-kind label " +
+                                    "length under \"Accent braces\", because \"which one of " +
+                                    "the siblings is this\" becomes worth answering sooner " +
+                                    "than \"what was this block called\". Whenever the number " +
+                                    "is repeated the block is named as well, so a closing brace " +
+                                    "never reads \"} [3]\" with nothing after it to say what " +
+                                    "the 3 counts.",
+                            )
+                    }
+                    row("\"[N]\" towards grey, %:") {
+                        spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::siblingGreyPercent)
+                            .comment("Based on the editor's keyword colour, like the other markers.")
+                    }
+                }.enabledIf(siblingNumbering.selected)
             }.enabledIf(pluginEnabled.selected)
 
             // Every group below greys out with the master switch, so it is obvious what it controls.
@@ -230,7 +250,14 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("From this block length, lines:") {
-                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP).bindIntValue(config::typeLabelMinLines)
+                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                    .bindIntValue(config::typeLabelMinLines)
+                                    .comment(
+                                        "A shorter block is still named when it is nested, " +
+                                            "or when its [N] is repeated after the closing " +
+                                            "brace -- both of those rules sit above this " +
+                                            "one.",
+                                    )
                             }
                             row("Label towards grey, %:") {
                                 spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeLabelGreyPercent)
@@ -353,7 +380,14 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                         }
                         rowsRange {
                             row("From this block length, lines:") {
-                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP).bindIntValue(config::functionLabelMinLines)
+                                spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                    .bindIntValue(config::functionLabelMinLines)
+                                    .comment(
+                                        "A shorter block is still named when it is nested, " +
+                                            "or when its [N] is repeated after the closing " +
+                                            "brace -- both of those rules sit above this " +
+                                            "one.",
+                                    )
                             }
                             row("Label towards grey, %:") {
                                 spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionLabelGreyPercent)

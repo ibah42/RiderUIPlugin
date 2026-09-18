@@ -95,6 +95,20 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         /** How far the `[N]` ordinal moves from the editor's keyword colour towards grey. */
         var siblingGreyPercent: Int by property(50)
 
+        /**
+         * How long a block must be before its `[N]` is repeated on the closing brace. The copy
+         * on the declaration line is not affected: it stands next to the real declaration, so
+         * it is readable at any length.
+         *
+         * Lower than the per-kind [typeLabelMinLines] on purpose. The two answer different
+         * questions: "the block is so long I have forgotten what it is" needs the name, while
+         * "this is one of several siblings" needs the count, and the second becomes worth
+         * saying much sooner than the first. Repeating the number is therefore also a reason
+         * to name the block -- see [BraceAccentStyle.needsLabel] -- so `[3]` never ends up
+         * alone on a closing brace with nothing after it to say what it counts.
+         */
+        var siblingNumberingEndOfBlockMinLines: Int by property(15)
+
         // --- type braces: class, struct, interface, enum, record ---
 
         var accentTypes: Boolean by property(true)

@@ -96,9 +96,19 @@ class BraceAccentStyle(
     }
 
     /**
-     * A nested block always gets a label, however short it is: with the fences gone, the label
-     * is the only thing left that names it. A top-level block only earns one once it is long
-     * enough that its own opening line has scrolled out of view.
+     * Whether the closing brace says what it closes. There are three separate reasons for it
+     * to, each with its own switch, and any one of them is enough:
+     *
+     *  - the block is **long**, so its own declaration has scrolled out of view
+     *    ([AccentConfig.labelMinLines], per kind);
+     *  - the block is **nested** inside one of its own kind, which is the hardest declaration
+     *    of all to find by scrolling ([AllmanSettings.Config.nestedLabelAlways]);
+     *  - the block is **numbered**, and the number is being repeated down here
+     *    ([numbersEndOfBlock]) -- `[3]` on its own says nothing, so whatever makes the ordinal
+     *    worth repeating makes the name worth repeating with it.
+     *
+     * The per-kind "label this kind at all" switch sits above all three: with it off the
+     * closing brace stays bare however the block qualifies.
      */
     fun needsLabel(accent: BraceAccent): Boolean {
         if (accent.isOpening) {
@@ -116,6 +126,9 @@ class BraceAccentStyle(
         // scrolling, which is why it may be named whatever its length -- with or without the
         // word `nest` in front of it.
         if (settings.state.nestedLabelAlways && isNestedBlock(accent)) {
+            return true
+        }
+        if (numbersEndOfBlock(accent)) {
             return true
         }
         return accent.spannedLines >= config.labelMinLines
@@ -173,10 +186,15 @@ class BraceAccentStyle(
     }
 
     /**
-     * `"[N]"` when [accent] has a sibling ordinal to show and the setting is on, `""` otherwise.
-     * No trailing space: both call sites -- the declaration-line marker and the end-of-block
-     * label's prefix -- join it with whatever `nest` text follows, exactly as they already join
-     * that text with the real label.
+     * `"[N]"` when [accent] has a sibling ordinal to show, `""` otherwise. No trailing space:
+     * both call sites -- the declaration-line marker and the end-of-block label's prefix --
+     * join it with whatever `nest` text follows, exactly as they already join that text with
+     * the real label.
+     *
+     * The two sides do not share a rule. On the declaration line the ordinal is always shown,
+     * because the real declaration is right next to it and explains it. On the closing brace
+     * it has to earn its place, since by then the declaration may be far above -- see
+     * [numbersEndOfBlock].
      */
     fun siblingOrdinalText(accent: BraceAccent): String {
         if (!settings.state.siblingNumberingEnabled) {
@@ -185,7 +203,30 @@ class BraceAccentStyle(
         if (accent.siblingOrdinal <= 0) {
             return ""
         }
+        if (!accent.isOpening && !numbersEndOfBlock(accent)) {
+            return ""
+        }
         return "[" + accent.siblingOrdinal + "]"
+    }
+
+    /**
+     * Whether a numbered block repeats its `[N]` on the closing brace: it has an ordinal, the
+     * numbering is on, and the block is at least
+     * [AllmanSettings.Config.siblingNumberingEndOfBlockMinLines] lines long. Below that the
+     * opening line is still on screen, so the reader can see for themselves which sibling this
+     * is, and the copy would be pure noise.
+     *
+     * Also the third reason [needsLabel] fires, which is what keeps `[3]` from ever standing
+     * on a closing brace with nothing after it.
+     */
+    private fun numbersEndOfBlock(accent: BraceAccent): Boolean {
+        if (!settings.state.siblingNumberingEnabled) {
+            return false
+        }
+        if (accent.siblingOrdinal <= 0) {
+            return false
+        }
+        return accent.spannedLines >= settings.state.siblingNumberingEndOfBlockMinLines
     }
 
     /**
