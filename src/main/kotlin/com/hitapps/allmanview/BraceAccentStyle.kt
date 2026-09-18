@@ -4,6 +4,7 @@ import com.hitapps.allmanview.scan.BlockKind
 import com.hitapps.allmanview.scan.BraceAccent
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.ui.ColorUtil
@@ -105,7 +106,9 @@ class BraceAccentStyle(
      *    of all to find by scrolling ([AllmanSettings.Config.nestedLabelAlways]);
      *  - the block is **numbered**, and the number is being repeated down here
      *    ([numbersEndOfBlock]) -- `[3]` on its own says nothing, so whatever makes the ordinal
-     *    worth repeating makes the name worth repeating with it.
+     *    worth repeating makes the name worth repeating with it;
+     *  - the block is long enough to **report its own span** ([showsBlockSpan]), for the same
+     *    reason: a span with no name attached says how far you scrolled but not past what.
      *
      * The per-kind "label this kind at all" switch sits above all three: with it off the
      * closing brace stays bare however the block qualifies.
@@ -129,6 +132,9 @@ class BraceAccentStyle(
             return true
         }
         if (numbersEndOfBlock(accent)) {
+            return true
+        }
+        if (showsBlockSpan(accent)) {
             return true
         }
         return accent.spannedLines >= config.labelMinLines
@@ -227,6 +233,74 @@ class BraceAccentStyle(
             return false
         }
         return accent.spannedLines >= settings.state.siblingNumberingEndOfBlockMinLines
+    }
+
+    /**
+     * Whether a block is long enough to report its own span at the closing brace. End-only:
+     * see [AllmanSettings.Config.blockSpanMarkerEnabled] for why there is nothing to draw on
+     * the declaration line.
+     */
+    fun showsBlockSpan(accent: BraceAccent): Boolean {
+        if (!settings.state.blockSpanMarkerEnabled) {
+            return false
+        }
+        if (accent.isOpening) {
+            return false
+        }
+        return accent.spannedLines >= settings.state.blockSpanMarkerMinLines
+    }
+
+    /**
+     * `{: 920  Δ: 143` -- the line the block's `{` is on, then how many lines below it the `}`
+     * sits. The two are derived from one another rather than measured separately, so the pair
+     * always adds up to the line the reader is looking at: start + delta is this very line.
+     * That is what makes the marker checkable at a glance instead of being two numbers to
+     * trust.
+     *
+     * Lines are 1-based, matching the gutter. [BraceAccent.spannedLines] is already a delta --
+     * the scanner counts it from the opening brace's line -- so no second measurement is taken
+     * here and the marker cannot drift from the length every threshold in the plugin uses.
+     */
+    fun blockSpanText(accent: BraceAccent): String {
+        val closingLine = editor.document.getLineNumber(clampToDocument(accent.offset)) + 1
+        val openingLine = closingLine - accent.spannedLines
+        return BLOCK_SPAN_START_PREFIX + openingLine + BLOCK_SPAN_DELTA_PREFIX + accent.spannedLines
+    }
+
+    /**
+     * The span marker's own colour, and the one marker not built on the keyword colour: it is
+     * built on the editor's line-number colour instead, then pushed towards grey by
+     * [AllmanSettings.Config.blockSpanMarkerGreyPercent] like every other marker.
+     *
+     * Deliberate -- the marker is line numbers. It says nothing about the language, only where
+     * in the file you are, which is exactly what the gutter beside it already says, so it
+     * should read as an extension of the gutter rather than as another word in the block's
+     * title. Nothing is sampled from the document either: the gutter does not dim inside a
+     * disabled `#if` branch, so neither does this.
+     */
+    fun blockSpanColor(): Color {
+        return ColorBalance.towardsGrey(lineNumberColor(), settings.state.blockSpanMarkerGreyPercent)
+    }
+
+    /** The editor's own line-number colour, falling back to the scheme's plain foreground. */
+    private fun lineNumberColor(): Color {
+        val scheme = editor.colorsScheme
+        val fromScheme = scheme.getColor(EditorColors.LINE_NUMBERS_COLOR)
+        if (fromScheme != null) {
+            return fromScheme
+        }
+        return scheme.defaultForeground
+    }
+
+    /** Guards [com.intellij.openapi.editor.Document.getLineNumber], which throws out of range. */
+    private fun clampToDocument(offset: Int): Int {
+        if (offset < 0) {
+            return 0
+        }
+        if (offset > editor.document.textLength) {
+            return editor.document.textLength
+        }
+        return offset
     }
 
     /**
@@ -362,5 +436,14 @@ class BraceAccentStyle(
 
         /** Greek lowercase lambda, standing in for `fun` on a lambda's own label. */
         private const val LAMBDA_SYMBOL = "λ"
+
+        /** Opens the span marker with the character the marker is about: `{: 920`. */
+        private const val BLOCK_SPAN_START_PREFIX = "{: "
+
+        /**
+         * Greek capital delta, the usual sign for a difference, between the two halves of the
+         * span marker. Two spaces before it, so the pair reads as two facts rather than one.
+         */
+        private const val BLOCK_SPAN_DELTA_PREFIX = "  Δ: "
     }
 }

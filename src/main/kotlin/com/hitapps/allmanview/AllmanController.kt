@@ -486,7 +486,8 @@ class AllmanController(private val editor: Editor) : Disposable {
      * Every run the closing brace's inlay draws, left to right: the paired markers first, each
      * behind its own switch, then the construct word (`class`, `fun`, `ns`, ...) in the
      * editor's own keyword colour and the symbol's own name in its own accent colour -- those
-     * last two only when this kind of block is named at all, which is a separate switch again.
+     * last two only when this kind of block is named at all, which is a separate switch again
+     * -- and last of all, on a very long block, the span marker `{: 920  Δ: 143`.
      *
      * An empty list means the closing brace gets no inlay: with every part switched off there
      * would be nothing to draw in it.
@@ -507,6 +508,11 @@ class AllmanController(private val editor: Editor) : Disposable {
         }
         if (braceStyle.nameText.isNotEmpty()) {
             appendSegment(segments, braceStyle.nameText, braceStyle.nameColor)
+        }
+        // Last, after the name: the span is about the block as a whole, so it reads as a
+        // footnote to everything in front of it rather than as another word in its title.
+        if (style.showsBlockSpan(accent)) {
+            appendSegment(segments, style.blockSpanText(accent), style.blockSpanColor())
         }
         return segments
     }
@@ -686,7 +692,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         private const val LABEL_LEADING_SPACES = 2
 
         /** The most runs an end-of-block label draws: two markers, the keyword, the name. */
-        private const val LABEL_SEGMENT_CAPACITY = 4
+        private const val LABEL_SEGMENT_CAPACITY = 5
 
         /** The most runs a declaration-line marker draws: the ordinal and the `nest` word. */
         private const val MARKER_SEGMENT_CAPACITY = 2

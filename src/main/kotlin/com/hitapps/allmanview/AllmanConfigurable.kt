@@ -18,15 +18,16 @@ import com.intellij.ui.dsl.builder.rows
 import com.intellij.ui.dsl.builder.selected
 
 /**
- * The panel has three independent sections, each behind its own master checkbox.
+ * The panel has four independent sections, each behind its own master checkbox.
  *
  * "Move braces down" owns the phantom lines and the dimming of the text they stand in for.
  * "Sibling numbering" owns the `[1]`, `[2]`, ... marker on a container's type/namespace
  * children; it has nothing to number while the child's own kind is not being recognised below,
- * under "Accent braces". "Accent braces" owns the colour, the weight, the shadow and the
- * end-of-block label of the three kinds of block that get one -- types, functions and
- * namespaces -- plus the nested marker shared by all three. Turning one master off leaves the
- * others running; the topmost checkbox turns off the plugin as a whole.
+ * under "Accent braces". "Block span" owns the `{: 920  Δ: 143` footnote a very long block's
+ * label ends with, whatever kind of block it is. "Accent braces" owns the colour, the weight,
+ * the shadow and the end-of-block label of the three kinds of block that get one -- types,
+ * functions and namespaces -- plus the nested marker shared by all three. Turning one master
+ * off leaves the others running; the topmost checkbox turns off the plugin as a whole.
  *
  * Every subsection below a master checkbox is a bold, borderless heading (`label(...).bold()`)
  * followed by a `rowsRange { ... }.enabledIf(...)`: a row disabled by an ancestor stays disabled
@@ -86,6 +87,48 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             .comment("Based on the editor's keyword colour, like the other markers.")
                     }
                 }.enabledIf(siblingNumbering.selected)
+            }.enabledIf(pluginEnabled.selected)
+
+            group("Block span") {
+                lateinit var blockSpanMarker: Cell<JBCheckBox>
+                row {
+                    blockSpanMarker = checkBox("Report how far back a very long block started")
+                        .bindSelected(config::blockSpanMarkerEnabled)
+                        .comment(
+                            "}  class Foo  {: 920  Δ: 143  --  the block's { is on line 920 " +
+                                "and its } is 143 lines below it, so the two numbers always add " +
+                                "up to the line you are looking at. Any kind of block qualifies: " +
+                                "type, function or namespace. This is the one marker with " +
+                                "nothing on the declaration line -- standing on line 920 you can " +
+                                "already see the block starts there; it is at the far end, after " +
+                                "a long scroll, that the question is worth answering. Drawn last, " +
+                                "after the block's name.",
+                        )
+                }
+                rowsRange {
+                    row("From this block length, lines:") {
+                        spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                            .bindIntValue(config::blockSpanMarkerMinLines)
+                            .comment(
+                                "Deliberately well above the label lengths under \"Accent " +
+                                    "braces\": those answer \"what was this block called\", " +
+                                    "this one answers \"how much did I just scroll past\", " +
+                                    "which only becomes a real question much later. A block " +
+                                    "that reaches this length is named as well, so the span " +
+                                    "never stands alone with nothing to say what it spans.",
+                            )
+                    }
+                    row("Span towards grey, %:") {
+                        spinner(PERCENT_RANGE, PERCENT_STEP)
+                            .bindIntValue(config::blockSpanMarkerGreyPercent)
+                            .comment(
+                                "Based on the editor's line-number colour, not the keyword " +
+                                    "colour the other markers use: this one reports where you " +
+                                    "are in the file, like the gutter it sits opposite, rather " +
+                                    "than naming a language construct.",
+                            )
+                    }
+                }.enabledIf(blockSpanMarker.selected)
             }.enabledIf(pluginEnabled.selected)
 
             // Every group below greys out with the master switch, so it is obvious what it controls.

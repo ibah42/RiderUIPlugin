@@ -109,6 +109,33 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
          */
         var siblingNumberingEndOfBlockMinLines: Int by property(15)
 
+        /**
+         * Master switch for the block-span marker: `{: 920  Δ: 143` at the very end of a very
+         * long block's label -- the line its `{` is on, and how many lines down its `}` is.
+         *
+         * The only marker with nothing on the declaration line: standing on line 920 you can
+         * already see that the block starts there. It is useful in exactly the opposite place,
+         * at the far end of a block long enough that scrolling back to look is a real cost.
+         */
+        var blockSpanMarkerEnabled: Boolean by property(true)
+
+        /**
+         * How long a block must be before it reports its own span. Well above every other
+         * threshold on purpose: this marker answers "how much did I just scroll past", which
+         * is only a question once the answer is genuinely hard to guess.
+         *
+         * Reaching it is also a reason to name the block -- see [BraceAccentStyle.needsLabel] --
+         * so the span never stands on a closing brace with nothing to say what it spans.
+         */
+        var blockSpanMarkerMinLines: Int by property(100)
+
+        /**
+         * How far the block-span marker moves from the editor's **line-number** colour towards
+         * grey. Not the keyword colour the other markers use: this one reports a position in the
+         * file rather than a language construct, so it belongs with the gutter it sits opposite.
+         */
+        var blockSpanMarkerGreyPercent: Int by property(50)
+
         // --- type braces: class, struct, interface, enum, record ---
 
         var accentTypes: Boolean by property(true)

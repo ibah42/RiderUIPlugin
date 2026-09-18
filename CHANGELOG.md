@@ -2,6 +2,27 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.9.0
+
+- New marker, drawn last on a very long block's end-of-block label: `{: 920  Δ: 143` -- the
+  line the block's `{` is on, and how many lines below it the `}` sits. Any kind of block
+  qualifies, type, function or namespace alike. The two numbers are derived from one another,
+  so they always add up to the line the reader is looking at and can be checked at a glance
+  instead of trusted.
+- It is the one marker with no copy on the declaration line, on purpose: standing on line 920
+  you can already see the block starts there. The question is only worth answering at the far
+  end, after the scroll that made it hard to guess.
+- It is also the one marker not coloured from the editor's keyword colour: it takes the
+  line-number colour instead, greyed by its own percentage. It reports a position in the file
+  rather than naming a language construct, so it reads as an extension of the gutter opposite
+  it. Nothing is sampled from the document for it either -- the gutter does not dim inside a
+  disabled `#if` branch, so neither does this.
+- New settings under "Block span": the switch, the length it starts at (default 100 lines, well
+  above the label lengths -- "how much did I just scroll past" becomes a question much later
+  than "what was this block called") and its own distance to grey. Reaching that length is the
+  fourth reason to name the block, alongside the three 1.8.0 settled, so the span never
+  stands alone with nothing to say what it spans.
+
 ## 1.8.0
 
 - Fixed: a closing brace could end up carrying a bare `[3]` and nothing else -- an ordinal with
