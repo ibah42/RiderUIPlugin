@@ -579,8 +579,18 @@ class BraceScanner(
         emitLine(lineEndOffset)
 
         if (lineStartsInCode && firstCodeOffset >= 0 && lastCodeOffset >= 0) {
-            previousCodeStart = statementLineStartOffset
-            previousCodeEnd = lastCodeOffset + 1
+            if (previousCodeEnd >= 0 && isWhereConstraintLine()) {
+                // `where T : IFoo` on its own line, after a multi-line parameter list already
+                // closed its parentheses. bracketDepth is back to 0 by here, so statementLineStartOffset
+                // was already reset to this very line -- see the bottom of this function -- and
+                // taking it now would truncate the header down to just the constraint clause,
+                // losing the declaration itself (name, return type, all of it). The constraint
+                // still belongs to the header above it, so only the end is extended.
+                previousCodeEnd = lastCodeOffset + 1
+            } else {
+                previousCodeStart = statementLineStartOffset
+                previousCodeEnd = lastCodeOffset + 1
+            }
         }
 
         val isUnterminatedSingleLine = lexerState == LexerState.LINE_COMMENT ||
@@ -1043,6 +1053,21 @@ class BraceScanner(
 
     // ------------------------------------------------------------------ small helpers
 
+    /**
+     * `where T : IFoo` at the start of the line just finished.
+     *
+     * A generic method's constraint clause sits after the parameter list's closing `)`, so by
+     * the time it is its own line, bracketDepth is already back to 0 and it looks exactly like
+     * the start of a brand new statement -- see the caller in [finishLine].
+     */
+    private fun isWhereConstraintLine(): Boolean {
+        if (!matchesAt(firstCodeOffset, WHERE_KEYWORD)) {
+            return false
+        }
+        val following = charAt(firstCodeOffset + WHERE_KEYWORD.length)
+        return !following.isLetterOrDigit() && following != '_'
+    }
+
     private fun markCode(offset: Int) {
         if (firstCodeOffset < 0) {
             firstCodeOffset = offset
@@ -1133,6 +1158,9 @@ class BraceScanner(
 
     companion object {
         private val SPLIT_KEYWORDS = setOf("else", "catch", "finally")
+
+        /** The one keyword that can continue a declaration's header after its own line closes. */
+        private const val WHERE_KEYWORD = "where"
 
         /** Keywords a splittable construct can start with. */
         private val HEADER_KEYWORDS = listOf(

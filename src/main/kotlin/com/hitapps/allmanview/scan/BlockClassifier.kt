@@ -56,8 +56,8 @@ internal class BlockClassifier(private val options: ScanOptions) {
      *
      * No name is recorded on purpose: the label is the bare [NAMESPACE_LABEL], since the name of
      * a namespace is long, repeated on every file and carries nothing the closing brace needs.
-     * With no name to sample, the colour falls back to the scheme's keyword colour -- see
-     * BraceAccentStyle.baseColor.
+     * With no name to sample, the colour is instead sampled from the `namespace` keyword at
+     * [headerStart] -- see BraceAccentStyle.baseColor.
      */
     private fun classifyNamespaceHeader(header: String, headerStart: Int, lineNumber: Int): OpenBlock? {
         if (HeaderReader.findKeyword(header, NAMESPACE_KEYWORDS) < 0) {

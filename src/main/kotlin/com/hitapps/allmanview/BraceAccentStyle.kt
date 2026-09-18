@@ -46,7 +46,8 @@ class BraceAccentStyle(
             return null
         }
 
-        val cacheKey = accent.kind.name + ":" + accent.nameOffset + ":" + accent.nameLength
+        val cacheKey = accent.kind.name + ":" + accent.nameOffset + ":" + accent.nameLength +
+            ":" + accent.headerOffset
         val cached = cache[cacheKey]
         if (cached != null) {
             return cached
@@ -143,15 +144,43 @@ class BraceAccentStyle(
     }
 
     /**
-     * Colour of the `nest` marker text itself: the editor's own keyword colour, pushed towards
+     * Colour of the `nest` marker text itself: the colour the editor actually paints at
+     * [offset] -- normally its own keyword colour, but the grey the IDE applies when that
+     * position sits in a disabled #if branch or unreachable code -- pushed further towards
      * grey by [AllmanSettings.Config.nestedLabelGreyPercent]. Independent of the block's own
      * accent colour, since "nested" names a language construct, not a symbol.
      */
-    fun nestedMarkerColor(): Color {
-        return ColorBalance.towardsGrey(keywordColor(), settings.state.nestedLabelGreyPercent)
+    fun nestedMarkerColor(offset: Int): Color {
+        return ColorBalance.towardsGrey(keywordColorAt(offset), settings.state.nestedLabelGreyPercent)
     }
 
-    /** The editor's own keyword colour: the base of every marker that names a construct. */
+    /**
+     * The colour actually painted at [offset], falling back to the scheme's plain keyword
+     * colour when there is no real position to sample or nothing was sampled there. Sampling
+     * first is what makes a marker or a namespace label follow the editor's own dimming of a
+     * disabled #if branch or unreachable code, instead of always showing the undimmed colour.
+     */
+    private fun keywordColorAt(offset: Int): Color {
+        if (offset in 0 until editor.document.textLength) {
+            val sampled = EditorColorSampler.foregroundAt(editor, firstNonBlankOffset(offset))
+            if (sampled != null) {
+                return sampled
+            }
+        }
+        return keywordColor()
+    }
+
+    /** First non-space, non-tab character at or after [offset]. */
+    private fun firstNonBlankOffset(offset: Int): Int {
+        val characters = editor.document.immutableCharSequence
+        var end = offset
+        while (end < characters.length && (characters[end] == ' ' || characters[end] == '\t')) {
+            end++
+        }
+        return end
+    }
+
+    /** The editor's own keyword colour: the fallback for every marker that names a construct. */
     private fun keywordColor(): Color {
         val scheme = editor.colorsScheme
         val fromScheme = scheme.getAttributes(DefaultLanguageHighlighterColors.KEYWORD)
@@ -192,14 +221,17 @@ class BraceAccentStyle(
 
     /**
      * Sampled from the block's own name, so the brace matches whatever the scheme paints that
-     * name. A namespace has no name recorded, so the sampler returns null for its offset of -1
-     * and it lands on the keyword colour below -- which is the right answer for it anyway:
-     * `ns` names a language construct, not a symbol.
+     * name. A namespace has no name recorded, so it is sampled from its `namespace` keyword
+     * instead -- which is the right answer for it anyway: `ns` names a language construct, not
+     * a symbol.
      */
     private fun baseColor(accent: BraceAccent): Color {
-        // A namespace records no name, so there is nothing to sample: it simply is the keyword.
+        // A namespace records no name, so there is nothing to sample from a name; sample the
+        // "namespace" keyword itself instead of always reading the scheme's keyword colour, so
+        // a disabled #if branch or unreachable code greys this out exactly like everything else
+        // the editor paints there.
         if (accent.kind == BlockKind.NAMESPACE) {
-            return keywordColor()
+            return keywordColorAt(accent.headerOffset)
         }
 
         val sampled = EditorColorSampler.foregroundAt(editor, accent.nameOffset)

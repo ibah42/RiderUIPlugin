@@ -961,4 +961,46 @@ class BraceScannerTest {
         assertTrue(accents(src).none { it.kind == BlockKind.NAMESPACE })
         assertTrue(accents(src).any { it.kind == BlockKind.TYPE })
     }
+
+    // --- a `where` clause on its own line, right before the brace, must not eat the header ---
+
+    @Test
+    fun `generic method with a multi-line where clause and an Allman brace is still a function`() {
+        // The bug: the closing `)` of the parameter list ends the previous statement, so by the
+        // time the `where` line is its own line, bracketDepth is already back to 0 and it reads
+        // as a brand new (empty) statement -- discarding the whole signature above it.
+        val src = "public async UniTask<HttpResponse<TResponse>> Request<TResponse>(\n" +
+            "    HttpRequest httpRequest,\n" +
+            "    CancellationToken cancellationToken\n" +
+            ")\n" +
+            "    where TResponse : class\n" +
+            "{\n" +
+            "}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Request", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `generic method with a multi-line where clause and an inline brace is still a function`() {
+        val src = "public async UniTask<HttpResponse<TResponse>> Request<TResponse>(\n" +
+            "    HttpRequest httpRequest,\n" +
+            "    CancellationToken cancellationToken\n" +
+            ") where TResponse : class {\n" +
+            "}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Request", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `two where clauses on separate lines both stay part of the same header`() {
+        val src = "public void Bind<T1, T2>(\n" +
+            "    T1 a,\n" +
+            "    T2 b)\n" +
+            "    where T1 : class\n" +
+            "    where T2 : struct\n" +
+            "{\n" +
+            "}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Bind", accentName(src, accents(src).first()))
+    }
 }

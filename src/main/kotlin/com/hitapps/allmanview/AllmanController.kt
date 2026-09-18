@@ -206,7 +206,8 @@ class AllmanController(private val editor: Editor) : Disposable {
             if (headerOffset >= documentLength) {
                 continue
             }
-            addNestedMarker(contentStartOffset(headerOffset), style.nestedMarkerColor())
+            val contentOffset = contentStartOffset(headerOffset)
+            addNestedMarker(contentOffset, style.nestedMarkerColor(contentOffset))
         }
     }
 
@@ -284,7 +285,10 @@ class AllmanController(private val editor: Editor) : Disposable {
             /* relatesToPrecedingText = */ true,
             BlockLabelRenderer(
                 prefixText = prefixText,
-                prefixColor = style.nestedMarkerColor(),
+                // Sampled at the brace itself, right before the label: a closing brace inside a
+                // disabled #if branch or unreachable code is already painted grey there, and the
+                // marker should read the same way.
+                prefixColor = style.nestedMarkerColor(accent.offset),
                 labelText = braceStyle.labelText,
                 labelColor = braceStyle.labelColor,
                 leadingSpaces = LABEL_LEADING_SPACES,
