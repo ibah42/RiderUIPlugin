@@ -336,10 +336,7 @@ class AllmanController(private val editor: Editor) : Disposable {
             offset,
             /* relatesToPrecedingText = */ false,
             BlockLabelRenderer(
-                prefixText = "",
-                prefixColor = color,
-                labelText = text,
-                labelColor = color,
+                segments = listOf(BlockLabelRenderer.Segment(text, color)),
                 leadingSpaces = 0,
                 trailingSpaces = 1,
             ),
@@ -372,19 +369,11 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     private fun addLabel(accent: BraceAccent, style: BraceAccentStyle, braceStyle: BraceStyle) {
-        val prefixText = endOfBlockLabelPrefix(style, accent)
-
         val inlay = editor.inlayModel.addInlineElement(
             accent.offset + 1,
             /* relatesToPrecedingText = */ true,
             BlockLabelRenderer(
-                prefixText = prefixText,
-                // Sampled at the brace itself, right before the label: a closing brace inside a
-                // disabled #if branch or unreachable code is already painted grey there, and the
-                // marker should read the same way.
-                prefixColor = style.nestedMarkerColor(accent.offset),
-                labelText = braceStyle.labelText,
-                labelColor = braceStyle.labelColor,
+                segments = endOfBlockLabelSegments(style, accent, braceStyle),
                 leadingSpaces = LABEL_LEADING_SPACES,
                 trailingSpaces = 0,
             ),
@@ -395,18 +384,59 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /**
-     * `"[N] nest "`, `"[N] "`, `"nest "`, or `""`: the sibling ordinal and the `nest` marker, in
-     * that order, sharing one colour and one trailing space before the real label -- the same
-     * ordering as [declarationLineMarkerText] uses on the opening side, so a block reads the
-     * same number in both places.
+     * Up to three runs, left to right: the `[N] nest` marker (its own colour, shared with the
+     * declaration-line marker), the bare construct word (`class`, `fun`, `ns`, ...) in the
+     * editor's own keyword colour, and the symbol's own name in its own real accent colour --
+     * so the label never paints `class` in the colour of a class name just because they sit
+     * side by side in the same phantom text.
      */
-    private fun endOfBlockLabelPrefix(style: BraceAccentStyle, accent: BraceAccent): String {
+    private fun endOfBlockLabelSegments(
+        style: BraceAccentStyle,
+        accent: BraceAccent,
+        braceStyle: BraceStyle,
+    ): List<BlockLabelRenderer.Segment> {
+        val segments = ArrayList<BlockLabelRenderer.Segment>(LABEL_SEGMENT_CAPACITY)
+
+        val markerText = endOfBlockConstructMarkerText(style, accent)
+        if (markerText.isNotEmpty()) {
+            // Sampled at the brace itself, right before the label: a closing brace inside a
+            // disabled #if branch or unreachable code is already painted grey there, and the
+            // marker should read the same way.
+            segments.add(BlockLabelRenderer.Segment(markerText + " ", style.nestedMarkerColor(accent.offset)))
+        }
+
+        if (braceStyle.keywordText.isNotEmpty()) {
+            val keywordText: String
+            if (braceStyle.nameText.isEmpty()) {
+                keywordText = braceStyle.keywordText
+            } else {
+                keywordText = braceStyle.keywordText + " "
+            }
+            segments.add(BlockLabelRenderer.Segment(keywordText, braceStyle.keywordColor))
+        }
+
+        if (braceStyle.nameText.isNotEmpty()) {
+            segments.add(BlockLabelRenderer.Segment(braceStyle.nameText, braceStyle.nameColor))
+        }
+
+        return segments
+    }
+
+    /**
+     * `"[N] nest"`, `"[N]"`, `"nest"`, or `""`: the sibling ordinal and the `nest` marker, in
+     * that order -- the same ordering as [declarationLineMarkerText] uses on the opening side,
+     * so a block reads the same number in both places.
+     */
+    private fun endOfBlockConstructMarkerText(style: BraceAccentStyle, accent: BraceAccent): String {
         val ordinalText = style.siblingOrdinalText(accent)
         val nestText = if (style.marksAsNested(accent)) BraceAccentStyle.NESTED_MARKER_TEXT else ""
-        if (ordinalText.isEmpty() && nestText.isEmpty()) {
-            return ""
+        if (ordinalText.isEmpty()) {
+            return nestText
         }
-        return listOf(ordinalText, nestText).filter { it.isNotEmpty() }.joinToString(" ") + " "
+        if (nestText.isEmpty()) {
+            return ordinalText
+        }
+        return "$ordinalText $nestText"
     }
 
     /**
@@ -581,6 +611,9 @@ class AllmanController(private val editor: Editor) : Disposable {
 
         /** Gap after the brace so the end-of-block label does not stick to it. */
         private const val LABEL_LEADING_SPACES = 2
+
+        /** The most segments an end-of-block label ever draws: the marker, the keyword, the name. */
+        private const val LABEL_SEGMENT_CAPACITY = 3
 
         /** The scanner is linear, but a full timed rescan of a huge file is pointless. */
         private const val MAX_FILE_CHARS = 2_000_000

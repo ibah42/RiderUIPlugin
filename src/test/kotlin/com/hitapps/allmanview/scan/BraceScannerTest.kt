@@ -217,6 +217,35 @@ class BraceScannerTest {
     }
 
     @Test
+    fun `hanging brace after a constructor initializer is indented like the declaration, not the clause`() {
+        // ": base(x)" is conventionally indented one level deeper than the constructor itself;
+        // bracketDepth is already back to 0 by the time that line starts, since the
+        // constructor's own parameter list already closed -- see BraceScanner.readIndent.
+        val src = "    public Foo()\n        : base(x) {\n    }"
+        val site = scan(src).single()
+        assertEquals("    ", site.indent)
+        assertEquals(listOf("{"), site.phantomTexts)
+    }
+
+    @Test
+    fun `hanging brace after a this-call initializer is indented like the declaration too`() {
+        val src = "    public Foo()\n        : this(1) {\n    }"
+        assertEquals("    ", scan(src).single().indent)
+    }
+
+    @Test
+    fun `a where clause still gets the same indent fix as a constructor initializer`() {
+        val src = "    void Bind<T>(T value)\n        where T : class {\n    }"
+        assertEquals("    ", scan(src).single().indent)
+    }
+
+    @Test
+    fun `a constructor already in Allman style is left alone regardless of the initializer`() {
+        val src = "public Foo()\n    : base(x)\n{\n}"
+        assertTrue(scan(src).isEmpty())
+    }
+
+    @Test
     fun `call chain takes the indent of its own line`() {
         assertEquals("    ", scan("var x = Foo()\n    .Bar(y => {\n    });").single().indent)
     }
@@ -507,6 +536,44 @@ class BraceScannerTest {
     fun `constructor is a function too`() {
         val src = "public Spawner(int count) {\n}"
         assertEquals("Spawner", accentName(src, accents(src).first()))
+        assertEquals("ctor", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `constructor with a base call initializer on its own line keeps its name`() {
+        val src = "public HttpService()\n    : base(Interface)\n{\n}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("HttpService", accentName(src, accents(src).first()))
+        assertEquals("ctor", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `constructor with a this call initializer on its own line keeps its name`() {
+        val src = "public Spawner()\n    : this(1)\n{\n}"
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+        assertEquals("ctor", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `static constructor is its own keyword`() {
+        val src = "static Spawner() {\n}"
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+        assertEquals("static ctor", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `destructor is recognised and named after its type`() {
+        val src = "~Spawner() {\n}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+        assertEquals("dtor", accents(src).first().keyword)
+    }
+
+    @Test
+    fun `destructor in Allman style keeps its name`() {
+        val src = "~Spawner()\n{\n}"
+        assertEquals("Spawner", accentName(src, accents(src).first()))
+        assertEquals("dtor", accents(src).first().keyword)
     }
 
     @Test
@@ -652,12 +719,90 @@ class BraceScannerTest {
 
         val onlyFunctions = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentTypes = false)).scan()
         assertTrue(onlyFunctions.accents.all { it.kind == BlockKind.FUNCTION })
+        // `class A` itself must stay invisible, not fall into the new property fallback and
+        // come out mislabeled as `prop A`.
+        assertEquals(2, onlyFunctions.accents.size)
     }
 
     @Test
-    fun `properties are not accented`() {
-        assertTrue(accents("public int Count { get; set; }").isEmpty())
-        assertTrue(accents("public int Count {\n    get {\n        return 1;\n    }\n}").isEmpty())
+    fun `a class header does not fall into the property fallback when types are off`() {
+        val options = ScanOptions(accentTypes = false, accentFunctions = true)
+        val result = BraceScanner("class A {\n}", Flavor.CSHARP, options).scan()
+        assertTrue(result.accents.isEmpty())
+    }
+
+    @Test
+    fun `a namespace header does not fall into the property fallback when namespaces are off`() {
+        val options = ScanOptions(accentNamespaces = false, accentFunctions = true, accentTypes = false)
+        val result = BraceScanner("namespace Foo {\n}", Flavor.CSHARP, options).scan()
+        assertTrue(result.accents.isEmpty())
+    }
+
+    @Test
+    fun `an auto-property with no accessor body is still accented as prop, just once`() {
+        // `get;` and `set;` never open a brace of their own, but the property's own `{ }` does.
+        val src = "public int Count { get; set; }"
+        assertEquals(listOf('{' to BlockKind.FUNCTION, '}' to BlockKind.FUNCTION), accentKinds(src))
+        assertEquals("prop", accents(src).first().keyword)
+        assertEquals("Count", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a property with a block body is accented as prop, get and set`() {
+        val src = "public int Count {\n    get {\n        return 1;\n    }\n    set {\n        _c = value;\n    }\n}"
+        assertEquals(
+            listOf(
+                '{' to BlockKind.FUNCTION,
+                '{' to BlockKind.FUNCTION,
+                '}' to BlockKind.FUNCTION,
+                '{' to BlockKind.FUNCTION,
+                '}' to BlockKind.FUNCTION,
+                '}' to BlockKind.FUNCTION,
+            ),
+            accentKinds(src),
+        )
+        val prop = accents(src).first { it.isOpening }
+        assertEquals("prop", prop.keyword)
+        assertEquals("Count", accentName(src, prop))
+
+        val keywords = accents(src).filter { it.isOpening }.map { it.keyword }
+        assertEquals(listOf("prop", "get", "set"), keywords)
+    }
+
+    @Test
+    fun `a private setter keeps the accessor keyword, not the modifier`() {
+        val src = "public int Count {\n    get {\n        return 1;\n    }\n    private set {\n        _c = value;\n    }\n}"
+        val setter = accents(src).first { it.isOpening && it.keyword == "set" }
+        assertEquals("", accentName(src, setter))
+    }
+
+    @Test
+    fun `init accessor is recognised too`() {
+        val src = "public int Count {\n    get {\n        return 1;\n    }\n    init {\n        _c = value;\n    }\n}"
+        val keywords = accents(src).filter { it.isOpening }.map { it.keyword }
+        assertEquals(listOf("prop", "get", "init"), keywords)
+    }
+
+    @Test
+    fun `an accessor has no name of its own`() {
+        val src = "public int Count {\n    get {\n        return 1;\n    }\n}"
+        val getter = accents(src).first { it.isOpening && it.keyword == "get" }
+        assertEquals(-1, getter.nameOffset)
+        assertEquals(0, getter.nameLength)
+    }
+
+    @Test
+    fun `an accessor is nested inside its own property, like any function in a function`() {
+        val src = "public int Count {\n    get {\n        return 1;\n    }\n}"
+        val getter = accents(src).first { it.isOpening && it.keyword == "get" }
+        assertTrue(getter.isNested)
+    }
+
+    @Test
+    fun `a property is never numbered as a sibling`() {
+        val src = "public int A {\n    get {\n        return 1;\n    }\n}\n" +
+            "public int B {\n    get {\n        return 2;\n    }\n}"
+        assertTrue(accents(src).all { it.siblingOrdinal == 0 })
     }
 
     @Test
@@ -735,8 +880,11 @@ class BraceScannerTest {
     }
 
     @Test
-    fun `property with a body in Allman style is not accented`() {
-        assertTrue(accents("public int Count\n{\n    get\n    {\n        return 1;\n    }\n}").isEmpty())
+    fun `property with a body in Allman style is accented too`() {
+        val src = "public int Count\n{\n    get\n    {\n        return 1;\n    }\n}"
+        val keywords = accents(src).filter { it.isOpening }.map { it.keyword }
+        assertEquals(listOf("prop", "get"), keywords)
+        assertEquals("Count", accentName(src, accents(src).first { it.isOpening }))
     }
 
     @Test

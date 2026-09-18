@@ -18,8 +18,14 @@ class BraceStyle(
     val shadowColor: Color?,
     val shadowOffsetX: Int,
     val shadowOffsetY: Int,
-    val labelText: String,
-    val labelColor: Color,
+
+    /** The bare construct word (`class`, `fun`, `ns`, ...), in the editor's own keyword colour. */
+    val keywordText: String,
+    val keywordColor: Color,
+
+    /** The symbol's own name, in its own real accent colour -- empty when there is no name. */
+    val nameText: String,
+    val nameColor: Color,
 )
 
 /**
@@ -56,16 +62,11 @@ class BraceAccentStyle(
         val base = baseColor(accent)
         val braceColor = shiftAwayFromBackground(base, config.lightPercent, config.darkPercent)
 
-        // A label that names a symbol follows its brace, shifted away from the background along
-        // with it. A label that names a language construct does not: `ns` is the editor's own
-        // keyword colour, and shifting that away from the background is exactly what made it
-        // read darker than every other keyword on screen.
-        val labelBase: Color
-        if (accent.kind == BlockKind.NAMESPACE) {
-            labelBase = base
-        } else {
-            labelBase = braceColor
-        }
+        // The keyword word (`class`, `fun`, `ns`, ...) is always the editor's own keyword
+        // colour, sampled the same way `nest` and the sibling-ordinal markers already are --
+        // never the name's colour, so a phantom label never tints `class` with the colour of a
+        // class name just because they share one label.
+        val keywordBase = keywordColorAt(accent.headerOffset)
 
         val attributes = TextAttributes()
         attributes.foregroundColor = braceColor
@@ -85,8 +86,10 @@ class BraceAccentStyle(
             shadowColor = shadowColor,
             shadowOffsetX = config.shadowOffsetX,
             shadowOffsetY = config.shadowOffsetY,
-            labelText = labelText(accent),
-            labelColor = ColorBalance.towardsGrey(labelBase, config.labelGreyPercent),
+            keywordText = keywordLabelText(accent),
+            keywordColor = ColorBalance.towardsGrey(keywordBase, config.labelGreyPercent),
+            nameText = nameText(accent),
+            nameColor = ColorBalance.towardsGrey(braceColor, config.labelGreyPercent),
         )
         cache[cacheKey] = style
         return style
@@ -105,7 +108,7 @@ class BraceAccentStyle(
         if (config == null || !config.showLabel) {
             return false
         }
-        if (labelText(accent).isEmpty()) {
+        if (accent.keyword.isEmpty()) {
             return false
         }
         if (marksAsNested(accent)) {
@@ -212,41 +215,41 @@ class BraceAccentStyle(
      * own to be a `fun` of, and lambda calculus already owns the glyph (the Half-Life logo is
      * the same choice, for the same reason).
      */
-    private fun labelText(accent: BraceAccent): String {
+    private fun keywordLabelText(accent: BraceAccent): String {
         if (accent.keyword.isEmpty()) {
             return ""
         }
-        val keyword: String
         if (accent.isLambda) {
-            keyword = LAMBDA_SYMBOL
-        } else {
-            keyword = accent.keyword
+            return LAMBDA_SYMBOL
         }
+        return accent.keyword
+    }
 
+    /** The symbol's own name, exactly as written -- empty when the accent names no symbol. */
+    private fun nameText(accent: BraceAccent): String {
         if (accent.nameOffset < 0 || accent.nameLength <= 0) {
-            return keyword
+            return ""
         }
-
         val end = accent.nameOffset + accent.nameLength
         if (end > editor.document.textLength) {
-            return keyword
+            return ""
         }
-        val name = editor.document.immutableCharSequence.subSequence(accent.nameOffset, end)
-        return keyword + " " + name
+        return editor.document.immutableCharSequence.subSequence(accent.nameOffset, end).toString()
     }
 
     /**
      * Sampled from the block's own name, so the brace matches whatever the scheme paints that
-     * name. A namespace has no name recorded, so it is sampled from its `namespace` keyword
-     * instead -- which is the right answer for it anyway: `ns` names a language construct, not
-     * a symbol.
+     * name. A namespace, and a property accessor (`get`/`set`/`init`), have no name recorded,
+     * so each is sampled from its own keyword instead -- which is the right answer for both:
+     * neither names a symbol, only a language construct.
      */
     private fun baseColor(accent: BraceAccent): Color {
-        // A namespace records no name, so there is nothing to sample from a name; sample the
-        // "namespace" keyword itself instead of always reading the scheme's keyword colour, so
-        // a disabled #if branch or unreachable code greys this out exactly like everything else
-        // the editor paints there.
-        if (accent.kind == BlockKind.NAMESPACE) {
+        // No name recorded -- true for every namespace, and now also for a property accessor
+        // (`get`, `set`, `init`), which belongs to the property rather than naming a symbol of
+        // its own. Sample the construct's own keyword instead of always reading the scheme's
+        // keyword colour, so a disabled #if branch or unreachable code greys this out exactly
+        // like everything else the editor paints there.
+        if (accent.nameOffset < 0 || accent.nameLength <= 0) {
             return keywordColorAt(accent.headerOffset)
         }
 

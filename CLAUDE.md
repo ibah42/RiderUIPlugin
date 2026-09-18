@@ -198,6 +198,15 @@ wrong.
 If an earlier piece of advice turned out to be wrong, say so in the first sentence and explain
 why. Do not blur it or bury it.
 
+### Keep a version log
+
+Every time `version` in `build.gradle.kts` is bumped, add an entry to `CHANGELOG.md` in the same
+turn -- newest version at the top, written for whoever reads it later (Ivan, or another agent
+picking this project back up), not just "bumped version". Say what changed and, where it matters,
+why -- a fix names the symptom it removes, a feature names what it now does. A version bump
+without a changelog entry, or a changelog entry without a version bump, is an incomplete turn:
+they are the same action and always happen together.
+
 ### Verifying without a full build
 
 Gradle needs network access it may not have in a sandboxed session (Maven Central, the Gradle
@@ -251,6 +260,26 @@ Things that are easy to break:
   been fully scanned. Reading `siblingOrdinal` off a `BraceAccent` produced mid-scan, rather than
   from the finished `ScanResult`, would see 0 for every block. Only `BlockKind.TYPE`/`NAMESPACE`
   ever count towards the threshold or get numbered; a function or a lambda never does.
+- **A line starting with a bare `:` continues the declaration above it**, not a new statement --
+  a constructor's `: base(...)`/`: this(...)`, or a wrapped base-type list. `BraceScanner`
+  tracks two separate things that both go stale on such a line unless it is recognised
+  (`isColonContinuationLine`, alongside the older `isWhereConstraintLine` for a generic method's
+  `where` clause): `classifyBlock`'s header text (`previousCodeStart`/`previousCodeEnd`, fixed by
+  extending the end instead of resetting the start), and the phantom brace's indent
+  (`statementLineStartOffset`/`statementLineNumber`, fixed by restoring them from
+  `statementStartBeforeContinuation`/`statementNumberBeforeContinuation` before `readIndent` can
+  see the wrong, deeper value). Missing either one showed up as a constructor with a base-call
+  initializer losing its own colour and name, or its hanging brace landing one indent level too
+  deep, under the initializer clause instead of the declaration.
+- **`BlockKind.FUNCTION` covers more than `fun Name` now.** `BlockClassifier` also recognises a
+  constructor (`ctor`), a static constructor (`static ctor`), a destructor (`dtor`), a property's
+  own declaration (`prop`) and its accessors (`get`/`set`/`init`) -- all under the same kind and
+  the same `accentFunctions` toggle, distinguished only by `OpenBlock.keyword`. An accessor has
+  no name of its own (`nameOffset == -1`, like a namespace), so `BraceAccentStyle.baseColor`
+  samples its own keyword instead of a name for both. A constructor is told apart from an
+  ordinary method by `scanModifiers`: nothing but modifiers between the header's start and the
+  name means no return type precedes it, which is what a constructor looks like and an ordinary
+  method never does.
 
 ### Performance: two refresh timers, not one
 

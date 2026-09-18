@@ -145,6 +145,17 @@ class BraceScanner(
     private var statementLineNumber = 0
 
     /**
+     * [statementLineStartOffset] and [statementLineNumber] as they were just before the last
+     * time they were reset. A `where` clause or a constructor's `: base(...)`/`: this(...)`
+     * sits at `bracketDepth == 0`, exactly like a brand new statement, so by the time
+     * [finishLine] notices such a line is really a continuation, the reset for it has already
+     * happened -- these two are what let it be undone. See the restore at the top of
+     * [finishLine] and its use in [readIndent].
+     */
+    private var statementStartBeforeContinuation = 0
+    private var statementNumberBeforeContinuation = 0
+
+    /**
      * `bracketDepth` saved across a `{ }` block, so a paren left open by an OUTER statement
      * (a lambda passed to a still-unclosed call, `Register(\n    x,\n    () =>\n    {`) does not
      * leak into the block's body. Without this, every line inside such a lambda looks like a
@@ -593,16 +604,31 @@ class BraceScanner(
     // ------------------------------------------------------------- per-line analysis
 
     private fun finishLine(lineEndOffset: Int) {
+        if (lineStartsInCode && firstCodeOffset >= 0 &&
+            previousCodeEnd >= 0 && (isWhereConstraintLine() || isColonContinuationLine())
+        ) {
+            // This line continues the declaration above it -- a `where` clause, or a
+            // constructor's `: base(...)`/`: this(...)` -- even though bracketDepth was already
+            // back to 0 when it started, which is what made the bottom of this function reset
+            // the statement's start to this line. Undo that now, before emitLine (right below)
+            // calls readIndent: a brace hanging on this very line must still take its indent
+            // from the declaration itself, not from this deeper-indented continuation clause.
+            statementLineStartOffset = statementStartBeforeContinuation
+            statementLineNumber = statementNumberBeforeContinuation
+        }
+
         emitLine(lineEndOffset)
 
         if (lineStartsInCode && firstCodeOffset >= 0 && lastCodeOffset >= 0) {
-            if (previousCodeEnd >= 0 && isWhereConstraintLine()) {
+            if (previousCodeEnd >= 0 && (isWhereConstraintLine() || isColonContinuationLine())) {
                 // `where T : IFoo` on its own line, after a multi-line parameter list already
-                // closed its parentheses. bracketDepth is back to 0 by here, so statementLineStartOffset
-                // was already reset to this very line -- see the bottom of this function -- and
-                // taking it now would truncate the header down to just the constraint clause,
-                // losing the declaration itself (name, return type, all of it). The constraint
-                // still belongs to the header above it, so only the end is extended.
+                // closed its parentheses, and `: base(...)`/`: this(...)` or a wrapped base-type
+                // list on its own line, both continue the declaration above them. bracketDepth is
+                // back to 0 by here, so statementLineStartOffset was already reset to this very
+                // line -- see the bottom of this function -- and taking it now would truncate the
+                // header down to just this one clause, losing the declaration itself (name,
+                // modifiers, return type, all of it). The declaration above still owns the
+                // header, so only the end is extended.
                 previousCodeEnd = lastCodeOffset + 1
             } else {
                 previousCodeStart = statementLineStartOffset
@@ -631,6 +657,8 @@ class BraceScanner(
 
         bracketDepthAtLineStart = bracketDepth
         if (bracketDepth == 0) {
+            statementStartBeforeContinuation = statementLineStartOffset
+            statementNumberBeforeContinuation = statementLineNumber
             statementLineStartOffset = lineStartOffset
             statementLineNumber = lineNumber
         }
@@ -891,12 +919,15 @@ class BraceScanner(
     }
 
     /**
-     * Indent for the phantom line. When the line continues an unclosed `(` or `[`, the indent
-     * is taken from the line the construct started on. The length limit guards against a desync
-     * caused by unbalanced brackets.
+     * Indent for the phantom line. When the line continues an unclosed `(` or `[`, or is itself
+     * a `where` clause or a constructor's `: base(...)`/`: this(...)`, the indent is taken from
+     * the line the construct started on -- not from this line's own, deeper indent. The length
+     * limit guards against a desync caused by unbalanced brackets.
      */
     private fun readIndent(): String {
-        val isContinuation = bracketDepthAtLineStart > 0 &&
+        val isContinuation = (
+            bracketDepthAtLineStart > 0 || isWhereConstraintLine() || isColonContinuationLine()
+            ) &&
             lineNumber - statementLineNumber in 1..MAX_CONTINUATION_LINES
 
         val indentStart: Int
@@ -1124,6 +1155,16 @@ class BraceScanner(
         }
         val following = charAt(firstCodeOffset + WHERE_KEYWORD.length)
         return !following.isLetterOrDigit() && following != '_'
+    }
+
+    /**
+     * `: base(...)`, `: this(...)`, or a base-type list wrapped onto its own line, at the start
+     * of the line just finished -- same idea as [isWhereConstraintLine], for the other clause
+     * that regularly gets wrapped onto a line of its own. `::` (C++ scope resolution) is
+     * excluded, since that starts an expression, not a continuation of the declaration above.
+     */
+    private fun isColonContinuationLine(): Boolean {
+        return charAt(firstCodeOffset) == ':' && charAt(firstCodeOffset + 1) != ':'
     }
 
     private fun markCode(offset: Int) {

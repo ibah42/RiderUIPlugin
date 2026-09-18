@@ -14,23 +14,26 @@ import java.awt.Graphics2D
 import java.awt.Rectangle
 
 /**
- * Inline text drawn without touching the document.
+ * Inline text drawn without touching the document, as one or more differently-coloured runs.
  *
- * Two call sites share this renderer: the end-of-block label after `}` (`class IosHttpClient`,
- * optionally preceded by a dimmed `nest `), and the `nest` marker before a nested block's
- * own declaration line. [prefixText] is empty for the plain, non-nested label.
+ * Three call sites share this renderer: the declaration-line marker (`[N] nest`, one run), the
+ * end-of-block label after `}` (up to three runs -- the `[N] nest` marker, the bare construct
+ * word `class`/`struct`/`fun`/`ns`/... in the editor's own keyword colour, and the symbol's own
+ * name in its own real accent colour, so a phantom label never paints `class` in the colour of
+ * a class name just because they sit in the same label).
  *
+ * @param segments the runs to draw, left to right, each in its own colour
  * @param leadingSpaces gap before the text, in columns
  * @param trailingSpaces gap after the text, in columns, so it never sticks to the real code
  */
 class BlockLabelRenderer(
-    private val prefixText: String,
-    private val prefixColor: Color,
-    private val labelText: String,
-    private val labelColor: Color,
+    private val segments: List<Segment>,
     private val leadingSpaces: Int,
     private val trailingSpaces: Int,
 ) : EditorCustomElementRenderer {
+
+    /** One coloured run of text within the label. */
+    data class Segment(val text: String, val color: Color)
 
     /**
      * Measured with the very font [paint] draws with, not by counting columns: the label is
@@ -42,7 +45,11 @@ class BlockLabelRenderer(
         val metrics = editor.contentComponent.getFontMetrics(labelFont(editor))
         val gapWidth = (leadingSpaces + trailingSpaces) * EditorUtil.getSpaceWidth(Font.PLAIN, editor)
 
-        return gapWidth + metrics.stringWidth(prefixText) + metrics.stringWidth(labelText)
+        var textWidth = 0
+        for (segment in segments) {
+            textWidth += metrics.stringWidth(segment.text)
+        }
+        return gapWidth + textWidth
     }
 
     override fun paint(
@@ -65,14 +72,14 @@ class BlockLabelRenderer(
         val columnWidth = EditorUtil.getSpaceWidth(Font.PLAIN, editor)
 
         var currentX = targetRegion.x + leadingSpaces * columnWidth
-        if (prefixText.isNotEmpty()) {
-            graphics.color = prefixColor
-            graphics.drawString(prefixText, currentX, baseline)
-            currentX += metrics.stringWidth(prefixText)
+        for (segment in segments) {
+            if (segment.text.isEmpty()) {
+                continue
+            }
+            graphics.color = segment.color
+            graphics.drawString(segment.text, currentX, baseline)
+            currentX += metrics.stringWidth(segment.text)
         }
-
-        graphics.color = labelColor
-        graphics.drawString(labelText, currentX, baseline)
     }
 
     /** Italic, so a label never reads as part of the code it sits next to. */
