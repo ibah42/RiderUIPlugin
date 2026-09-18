@@ -2,6 +2,25 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.7.1
+
+- Fixed: an indexer (`public int this[int i]`) was not recognised as a block at all -- its body
+  got no colour and no label, and its `get`/`set` were left looking like accessors of nothing,
+  unnested. An indexer is a property that takes arguments, so it is now labelled as one, with
+  `this` for its name exactly as the source writes it. Two things had hidden it: the header ends
+  with `]` instead of with its own name, and a default argument value inside the brackets read
+  as an initializer's `=`.
+- Fixed: the `nest` marker was being put on every property accessor. An accessor is inside its
+  property by definition, so the word said nothing and simply repeated itself on every `get`,
+  `set` and `init` in the file. Accessors are now excluded the same way lambdas already were,
+  and the fact that a block is one is recorded by the scanner rather than guessed from its
+  label, so it is covered by tests.
+- Both fixes are covered by tests: the scanner now records that a block is an accessor instead
+  of leaving that to be guessed from its label, which is what makes either one testable at all.
+  The suite grew from 151 to 196 cases, including negative ones for the shapes an indexer is
+  easy to confuse with -- an attribute on its own line, an array initializer, a collection
+  initializer, and a property whose type is an array.
+
 ## 1.7.0
 
 - Every kind of function block now has its own switch: methods, constructors (with static

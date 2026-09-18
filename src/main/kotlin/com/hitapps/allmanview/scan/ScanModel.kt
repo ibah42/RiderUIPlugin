@@ -76,6 +76,15 @@ data class BraceAccent(
     val spannedLines: Int,
     val isNested: Boolean = false,
     val isLambda: Boolean = false,
+
+    /**
+     * A property accessor body: `get`, `set` or `init`.
+     *
+     * Worth a flag of its own because an accessor is inside a property by definition, so
+     * "this block is nested" tells a reader nothing about it -- the same reason a lambda
+     * carries [isLambda]. See BraceAccentStyle.isNestedBlock.
+     */
+    val isAccessor: Boolean = false,
     val headerOffset: Int = -1,
     val siblingOrdinal: Int = 0,
 )

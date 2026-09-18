@@ -1010,6 +1010,7 @@ class BraceScanner(
                 spannedLines = spannedLines,
                 isNested = block.isNested,
                 isLambda = block.isLambda,
+                isAccessor = block.isAccessor,
                 headerOffset = block.headerOffset,
             ),
         )

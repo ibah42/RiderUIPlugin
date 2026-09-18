@@ -141,7 +141,13 @@ class BraceAccentStyle(
      * deliberately does not, so the two can be turned off independently.
      */
     private fun isNestedBlock(accent: BraceAccent): Boolean {
-        return accent.isNested && !accent.isLambda
+        if (accent.isLambda || accent.isAccessor) {
+            // Both are inside something by definition -- a lambda inside whatever takes it, an
+            // accessor inside its property -- so saying "nested" about them adds nothing and
+            // would put the word on every `get` and `set` in the file.
+            return false
+        }
+        return accent.isNested
     }
 
     /** Whether the braces themselves are decorated -- separate from whether the block is named. */

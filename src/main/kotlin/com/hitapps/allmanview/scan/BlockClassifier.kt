@@ -9,6 +9,9 @@ internal class OpenBlock(
     val openLineNumber: Int,
     val isLambda: Boolean = false,
 
+    /** See [BraceAccent.isAccessor]. */
+    val isAccessor: Boolean = false,
+
     /** Where the declaration starts, which for a multi-line signature is not the brace line. */
     val headerOffset: Int = -1,
 ) {
@@ -255,7 +258,15 @@ internal class BlockClassifier(private val options: ScanOptions) {
             // anything besides modifiers before the accessor word means this is not one
             return null
         }
-        return namedBlock(BlockKind.FUNCTION, word, header, headerStart, -1, lineNumber)
+        return namedBlock(
+            BlockKind.FUNCTION,
+            word,
+            header,
+            headerStart,
+            -1,
+            lineNumber,
+            isAccessor = true,
+        )
     }
 
     /**
@@ -265,6 +276,21 @@ internal class BlockClassifier(private val options: ScanOptions) {
      * same colour mechanism, just its own keyword ([PROPERTY_KEYWORD]).
      */
     private fun classifyPropertyHeader(header: String, headerStart: Int, lineNumber: Int): OpenBlock? {
+        // An indexer is checked before anything else here: its bracketed parameter list may
+        // hold a default value, whose `=` the assignment test below would read as an
+        // initializer, and it ends with `]` rather than with its own name.
+        val indexerIndex = indexerNameIndex(header)
+        if (indexerIndex >= 0) {
+            return namedBlock(
+                BlockKind.FUNCTION,
+                PROPERTY_KEYWORD,
+                header,
+                headerStart,
+                indexerIndex,
+                lineNumber,
+            )
+        }
+
         if (header.indexOf('(') >= 0 || HeaderReader.containsAssignment(header)) {
             // a parameter list or an assignment means this is not a bare "type name" header
             return null
@@ -299,6 +325,38 @@ internal class BlockClassifier(private val options: ScanOptions) {
         }
 
         return namedBlock(BlockKind.FUNCTION, PROPERTY_KEYWORD, header, headerStart, nameIndex, lineNumber)
+    }
+
+    /**
+     * Where an indexer's `this` keyword starts, or -1 when this header declares no indexer.
+     *
+     * `public int this[int i]` and `int IFoo.this[int i]` both count. An indexer is a property
+     * that takes arguments, so it is labelled as one -- and `this` is its name, exactly as the
+     * source writes it, which is also what the brace colour is then sampled from.
+     *
+     * The bracket alone is not enough to go on: an attribute line (`[Test]`) and an array
+     * initializer (`var x = new[]`) both end with `]` too, which is why the word immediately
+     * before the bracket has to be `this`.
+     */
+    private fun indexerNameIndex(header: String): Int {
+        val trimmed = header.trimEnd()
+        if (!trimmed.endsWith("]")) {
+            return -1
+        }
+
+        val bracketIndex = trimmed.indexOf('[')
+        if (bracketIndex < 0) {
+            return -1
+        }
+
+        val nameIndex = HeaderReader.identifierStartBefore(trimmed, bracketIndex)
+        if (nameIndex < 0) {
+            return -1
+        }
+        if (HeaderReader.identifierAt(trimmed, nameIndex) != INDEXER_KEYWORD) {
+            return -1
+        }
+        return nameIndex
     }
 
     /**
@@ -414,6 +472,7 @@ internal class BlockClassifier(private val options: ScanOptions) {
         nameIndex: Int,
         lineNumber: Int,
         isLambda: Boolean = false,
+        isAccessor: Boolean = false,
     ): OpenBlock {
         if (nameIndex < 0) {
             return OpenBlock(
@@ -423,6 +482,7 @@ internal class BlockClassifier(private val options: ScanOptions) {
                 keyword,
                 lineNumber,
                 isLambda = isLambda,
+                isAccessor = isAccessor,
                 headerOffset = headerStart,
             )
         }
@@ -457,6 +517,9 @@ internal class BlockClassifier(private val options: ScanOptions) {
 
         /** The property declaration itself, wrapping its accessors. */
         const val PROPERTY_KEYWORD = "prop"
+
+        /** An indexer's own name, as the source writes it: `public int this[int i]`. */
+        const val INDEXER_KEYWORD = "this"
 
         /** What a namespace's label prints, standing in for the keyword a type or function has. */
         const val NAMESPACE_LABEL = "ns"

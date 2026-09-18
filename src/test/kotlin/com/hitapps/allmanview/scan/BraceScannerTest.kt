@@ -1385,4 +1385,354 @@ class BraceScannerTest {
         assertEquals(1, accents.size)
         assertTrue(!accents[0].isNested)
     }
+
+    // ============================================================ accessors and properties
+
+    private fun openings(src: String, options: ScanOptions = ScanOptions()): List<BraceAccent> {
+        return BraceScanner(src, Flavor.CSHARP, options).scan().accents.filter { it.isOpening }
+    }
+
+    private fun propertyWithBody(): String {
+        return "" +
+            "class C\n{\n" +
+            "    public int A\n    {\n" +
+            "        get\n        {\n        }\n" +
+            "        set\n        {\n        }\n" +
+            "    }\n}\n"
+    }
+
+    @Test
+    fun `a property with a body reports itself and both of its accessors`() {
+        val keywords = openings(propertyWithBody()).map { it.keyword }
+        assertEquals(listOf("class", "prop", "get", "set"), keywords)
+    }
+
+    @Test
+    fun `get and set are flagged as accessors`() {
+        val accessors = openings(propertyWithBody()).filter { it.isAccessor }
+        assertEquals(2, accessors.size)
+        assertEquals(listOf("get", "set"), accessors.map { it.keyword })
+    }
+
+    @Test
+    fun `an accessor sits inside its property, so it is nested`() {
+        val accessors = openings(propertyWithBody()).filter { it.isAccessor }
+        assertTrue(accessors.all { it.isNested })
+    }
+
+    @Test
+    fun `the property itself is not an accessor`() {
+        val property = openings(propertyWithBody()).single { it.keyword == "prop" }
+        assertTrue(!property.isAccessor)
+    }
+
+    @Test
+    fun `a method is never an accessor`() {
+        val src = "class C\n{\n    void M()\n    {\n    }\n}\n"
+        assertTrue(openings(src).none { it.isAccessor })
+    }
+
+    @Test
+    fun `a lambda is never an accessor`() {
+        val src = "class C\n{\n    void M()\n    {\n        Run(() =>\n        {\n        });\n    }\n}\n"
+        val lambda = openings(src).single { it.isLambda }
+        assertTrue(!lambda.isAccessor)
+    }
+
+    @Test
+    fun `init is an accessor like get and set`() {
+        val src = "class C\n{\n    public int A\n    {\n        init\n        {\n        }\n    }\n}\n"
+        val accessor = openings(src).single { it.isAccessor }
+        assertEquals("init", accessor.keyword)
+    }
+
+    @Test
+    fun `an accessor keeps its flag when a modifier precedes it`() {
+        val src = "class C\n{\n    public int A\n    {\n        private set\n        {\n        }\n    }\n}\n"
+        val accessor = openings(src).single { it.isAccessor }
+        assertEquals("set", accessor.keyword)
+    }
+
+    @Test
+    fun `an auto-property has no accessor bodies, so only the property is reported`() {
+        val src = "class C\n{\n    public int A { get; set; }\n}\n"
+        val keywords = openings(src).map { it.keyword }
+        assertEquals(listOf("class", "prop"), keywords)
+    }
+
+    @Test
+    fun `an expression-bodied property has no braces and so no block`() {
+        val src = "class C\n{\n    public int A => _a;\n}\n"
+        assertEquals(listOf("class"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a property records its own name`() {
+        val src = propertyWithBody()
+        val property = openings(src).single { it.keyword == "prop" }
+        assertEquals("A", accentName(src, property))
+    }
+
+    @Test
+    fun `an accessor records no name -- it belongs to the property, it does not name a symbol`() {
+        val accessor = openings(propertyWithBody()).first { it.isAccessor }
+        assertEquals(-1, accessor.nameOffset)
+        assertEquals(0, accessor.nameLength)
+    }
+
+    // ============================================================ constructors and destructors
+
+    @Test
+    fun `a constructor, a static constructor and a destructor each get their own keyword`() {
+        val src = "" +
+            "class C\n{\n" +
+            "    public C()\n    {\n    }\n" +
+            "    static C()\n    {\n    }\n" +
+            "    ~C()\n    {\n    }\n}\n"
+        val keywords = openings(src).map { it.keyword }
+        assertEquals(listOf("class", "ctor", "static ctor", "dtor"), keywords)
+    }
+
+    @Test
+    fun `a constructor with a base initializer on its own line keeps its name`() {
+        val src = "class C\n{\n    public C(int a)\n        : base(a)\n    {\n    }\n}\n"
+        val constructor = openings(src).single { it.keyword == "ctor" }
+        assertEquals("C", accentName(src, constructor))
+    }
+
+    @Test
+    fun `a destructor records the type name it belongs to`() {
+        val src = "class C\n{\n    ~C()\n    {\n    }\n}\n"
+        val destructor = openings(src).single { it.keyword == "dtor" }
+        assertEquals("C", accentName(src, destructor))
+    }
+
+    // ============================================================ methods
+
+    @Test
+    fun `an expression-bodied method has no braces and so no block`() {
+        val src = "class C\n{\n    public int A() => _a;\n}\n"
+        assertEquals(listOf("class"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a default parameter value keeps the method recognisable`() {
+        val src = "class C\n{\n    public void M(string a = \"x\", int b = 5)\n    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("M", accentName(src, method))
+    }
+
+    @Test
+    fun `an attribute above a method does not hide it`() {
+        val src = "class C\n{\n    [Test]\n    public void M()\n    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("M", accentName(src, method))
+    }
+
+    @Test
+    fun `a local function inside a method is nested`() {
+        val src = "class C\n{\n    void M()\n    {\n        void Local()\n        {\n        }\n    }\n}\n"
+        val local = openings(src).single { accentName(src, it) == "Local" }
+        assertTrue(local.isNested)
+    }
+
+    @Test
+    fun `a method directly inside a class is not nested`() {
+        val src = "class C\n{\n    void M()\n    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertTrue(!method.isNested)
+    }
+
+    // ============================================================ lambdas
+
+    @Test
+    fun `a lambda assigned to a field borrows the target's name and is not nested there`() {
+        val src = "class C\n{\n    Action a = () =>\n    {\n    };\n}\n"
+        val lambda = openings(src).single { it.isLambda }
+        assertEquals("a", accentName(src, lambda))
+        assertTrue(!lambda.isNested)
+    }
+
+    @Test
+    fun `a lambda inside a method is nested and borrows the call's name`() {
+        val src = "class C\n{\n    void M()\n    {\n        items.Select(x =>\n        {\n        });\n    }\n}\n"
+        val lambda = openings(src).single { it.isLambda }
+        assertEquals("Select", accentName(src, lambda))
+        assertTrue(lambda.isNested)
+    }
+
+    // ============================================================ types and namespaces
+
+    @Test
+    fun `each type keyword is reported as written`() {
+        val src = "" +
+            "class A\n{\n}\n" +
+            "struct B\n{\n}\n" +
+            "interface C\n{\n}\n" +
+            "enum D\n{\n}\n" +
+            "record E\n{\n}\n"
+        assertEquals(listOf("class", "struct", "interface", "enum", "record"),
+            openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a record struct is still one type`() {
+        val src = "record struct Point\n{\n}\n"
+        val type = openings(src).single()
+        assertEquals(BlockKind.TYPE, type.kind)
+        assertEquals("Point", accentName(src, type))
+    }
+
+    @Test
+    fun `a type inside a namespace is not nested -- a namespace is a different kind`() {
+        val src = "namespace N\n{\n    class C\n    {\n    }\n}\n"
+        val type = openings(src).single { it.kind == BlockKind.TYPE }
+        assertTrue(!type.isNested)
+    }
+
+    @Test
+    fun `a namespace inside a namespace is nested`() {
+        val src = "namespace A\n{\n    namespace B\n    {\n    }\n}\n"
+        val inner = openings(src).last()
+        assertEquals(BlockKind.NAMESPACE, inner.kind)
+        assertTrue(inner.isNested)
+    }
+
+    // ============================================================ literals and comments
+
+    @Test
+    fun `a type keyword inside a string literal declares nothing`() {
+        val src = "class C\n{\n    void M()\n    {\n        Log(\"class Fake {\");\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a type keyword inside a line comment declares nothing`() {
+        val src = "class C\n{\n    // class Fake\n    void M()\n    {\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a type keyword inside a block comment declares nothing`() {
+        val src = "class C\n{\n    /* class Fake { */\n    void M()\n    {\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a verbatim string holding a brace does not open a block`() {
+        val src = "class C\n{\n    void M()\n    {\n        var s = @\"a { b\";\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    // ============================================================ sibling numbering
+
+    @Test
+    fun `a lone type child is not numbered`() {
+        val src = "namespace N\n{\n    class Only\n    {\n    }\n}\n"
+        assertTrue(openings(src).all { it.siblingOrdinal == 0 })
+    }
+
+    @Test
+    fun `two type children of the same namespace are numbered in order`() {
+        val src = "namespace N\n{\n    class A\n    {\n    }\n    class B\n    {\n    }\n}\n"
+        val types = openings(src).filter { it.kind == BlockKind.TYPE }
+        assertEquals(listOf(1, 2), types.map { it.siblingOrdinal })
+    }
+
+    @Test
+    fun `a function is never numbered, however many siblings it has`() {
+        val src = "class C\n{\n    void A()\n    {\n    }\n    void B()\n    {\n    }\n}\n"
+        val functions = openings(src).filter { it.kind == BlockKind.FUNCTION }
+        assertTrue(functions.all { it.siblingOrdinal == 0 })
+    }
+
+    @Test
+    fun `accessors are never numbered`() {
+        assertTrue(openings(propertyWithBody()).filter { it.isAccessor }.all { it.siblingOrdinal == 0 })
+    }
+
+    @Test
+    fun `the closing accent carries the same ordinal as its opening one`() {
+        val src = "namespace N\n{\n    class A\n    {\n    }\n    class B\n    {\n    }\n}\n"
+        val all = BraceScanner(src, Flavor.CSHARP, ScanOptions()).scan().accents
+        val closings = all.filter { !it.isOpening && it.kind == BlockKind.TYPE }
+        assertEquals(setOf(1, 2), closings.map { it.siblingOrdinal }.toSet())
+    }
+
+    // ============================================================ indexers
+
+    private fun indexerWithBothAccessors(): String {
+        return "" +
+            "class C\n{\n" +
+            "    public int this[int i]\n    {\n" +
+            "        get\n        {\n        }\n" +
+            "        set\n        {\n        }\n" +
+            "    }\n}\n"
+    }
+
+    @Test
+    fun `an indexer is a property whose name is the this keyword`() {
+        val src = indexerWithBothAccessors()
+        val indexer = openings(src).single { it.keyword == "prop" }
+        assertEquals("this", accentName(src, indexer))
+    }
+
+    @Test
+    fun `an indexer's accessors sit inside it, so they are nested`() {
+        val accessors = openings(indexerWithBothAccessors()).filter { it.isAccessor }
+        assertEquals(2, accessors.size)
+        assertTrue(accessors.all { it.isNested })
+    }
+
+    @Test
+    fun `an explicitly implemented indexer is still an indexer`() {
+        val src = "class C\n{\n    int IFoo.this[int i]\n    {\n        get\n        {\n        }\n    }\n}\n"
+        val indexer = openings(src).single { it.keyword == "prop" }
+        assertEquals("this", accentName(src, indexer))
+    }
+
+    @Test
+    fun `a default argument value does not hide an indexer`() {
+        // The `=` inside the brackets used to read as an initializer, which rejected the header.
+        val src = "class C\n{\n    public int this[int i = 5]\n    {\n        get\n        {\n        }\n    }\n}\n"
+        assertEquals(1, openings(src).count { it.keyword == "prop" })
+    }
+
+    @Test
+    fun `an indexer taking several parameters is still one property`() {
+        val src = "class C\n{\n    public int this[int x, int y]\n    {\n        get\n        {\n        }\n    }\n}\n"
+        assertEquals(1, openings(src).count { it.keyword == "prop" })
+    }
+
+    @Test
+    fun `an indexer is covered by the properties switch`() {
+        val keywords = openings(indexerWithBothAccessors(), ScanOptions(accentProperties = false))
+            .map { it.keyword }
+        assertTrue("prop" !in keywords)
+    }
+
+    @Test
+    fun `an attribute on its own line is not an indexer`() {
+        val src = "class C\n{\n    [Test]\n    public void M()\n    {\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `an array initializer is not an indexer`() {
+        val src = "class C\n{\n    void M()\n    {\n        var x = new[]\n        {\n            1\n        };\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `a collection initializer is not an indexer`() {
+        val src = "class C\n{\n    void M()\n    {\n        var d = new Dictionary<int, int>\n        {\n        };\n    }\n}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `an array-typed property keeps its own name, not this`() {
+        val src = "class C\n{\n    public int[] Values\n    {\n        get\n        {\n        }\n    }\n}\n"
+        val property = openings(src).single { it.keyword == "prop" }
+        assertEquals("Values", accentName(src, property))
+    }
 }
