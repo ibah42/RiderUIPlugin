@@ -2,6 +2,39 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.7.0
+
+- Every kind of function block now has its own switch: methods, constructors (with static
+  constructors and destructors), properties, accessors and lambdas. The switch works at the
+  classifier, so turning one off does not merely drop its label -- the plugin stops seeing the
+  block at all, with no colour, no shadow, and no place in the nesting or sibling bookkeeping.
+- Braces and labels became two switches per kind instead of one. "Colour the braces" and "Label
+  the end of the block" can now be set independently, so a file can carry names without coloured
+  braces, or coloured braces without any names.
+- A lambda's label split into its two halves: the symbol and the borrowed name each have their
+  own switch. With both off a lambda simply gets no label.
+- The `nest` word and "name a nested block whatever its length" are two switches now, not one.
+  Previously, switching the marker off silently took the label with it, so a short nested class
+  lost its name entirely rather than just losing the word in front of it.
+- Markers are paired and behave that way: one switch drives `[N]` and one drives `nest`, each in
+  both places the marker belongs -- before the declaration and on the closing brace. `nest` no
+  longer waits on the end-of-block label being on, which is what made the two markers disagree.
+- The `[N]` ordinal got its own distance to grey. It was being coloured by the `nest` marker's
+  setting, which it has nothing to do with.
+- Performance: the document was scanned twice for every edit, once by each of the two redraw
+  timers -- about 90ms per scan at the file-size ceiling, so 180ms on the EDT for one keystroke.
+  The scan is now shared between them, keyed on the document's modification stamp. Only the scan
+  is cached, never the colours built from it: a colour is sampled from the editor and can change
+  with no edit at all (the backend answering late, the scheme switching), so caching those would
+  freeze them until the next keystroke.
+- Performance: the move mechanic was building a style, and sampling a colour, for every accent in
+  the file, then using almost none of them -- a phantom line only ever repaints the braces that
+  actually moved down, and in a file already written in Allman style it repaints none at all. It
+  now styles only what it draws.
+- Performance: reading one character's colour no longer goes through the run-based sampler, which
+  allocated two arrays and a list and sorted that list to answer it. This is the most-called thing
+  in the plugin -- one or two calls per accent per redraw.
+
 ## 1.6.1
 
 - Fixed: a function, constructor or property with a default parameter value in its parameter

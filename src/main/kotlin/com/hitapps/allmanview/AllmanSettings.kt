@@ -20,6 +20,9 @@ data class AccentConfig(
     val shadowPercent: Int,
     val shadowOffsetX: Int,
     val shadowOffsetY: Int,
+
+    /** Colour, weight and shadow of the braces themselves -- independent of [showLabel]. */
+    val showBraces: Boolean,
     val showLabel: Boolean,
     val labelMinLines: Int,
     val labelGreyPercent: Int,
@@ -67,6 +70,14 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         var nestedMarkerEnabled: Boolean by property(true)
 
         /**
+         * Label a nested block whatever its length, ignoring the per-kind minimum. Separate
+         * from [nestedMarkerEnabled]: that one is the `nest` word, this one is whether the
+         * block is named at all -- a nested block's own declaration is the hardest to find by
+         * scrolling, which is the whole reason for the rule.
+         */
+        var nestedLabelAlways: Boolean by property(true)
+
+        /**
          * Colour of the `nest` marker: before a nested block's own declaration line, and as
          * the prefix on its end-of-block label. Based on the editor's keyword colour, pushed
          * towards grey by this percentage, since "nested" names a language construct rather
@@ -81,9 +92,13 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
          */
         var siblingNumberingEnabled: Boolean by property(true)
 
+        /** How far the `[N]` ordinal moves from the editor's keyword colour towards grey. */
+        var siblingGreyPercent: Int by property(50)
+
         // --- type braces: class, struct, interface, enum, record ---
 
         var accentTypes: Boolean by property(true)
+        var typeBraces: Boolean by property(true)
         var typeLightPercent: Int by property(50)
         var typeDarkPercent: Int by property(50)
         var typeBold: Boolean by property(true)
@@ -98,6 +113,25 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         // --- function braces: methods, constructors and lambdas ---
 
         var accentFunctions: Boolean by property(true)
+
+        // Which function blocks the plugin looks at. Off means it does not see the block at
+        // all -- no colour, no shadow, no label -- see ScanOptions.accentFunctions.
+        var accentMethods: Boolean by property(true)
+        var accentConstructors: Boolean by property(true)
+        var accentProperties: Boolean by property(true)
+        var accentAccessors: Boolean by property(true)
+        var accentLambdas: Boolean by property(true)
+
+        /** The lambda symbol on a lambda's own label. Independent of [lambdaNameEnabled]. */
+        var lambdaSymbolEnabled: Boolean by property(true)
+
+        /**
+         * The borrowed name on a lambda's own label -- the method it is passed to, or the
+         * assignment target. Independent of [lambdaSymbolEnabled]: with both off a lambda
+         * simply gets no label.
+         */
+        var lambdaNameEnabled: Boolean by property(true)
+        var functionBraces: Boolean by property(true)
         var functionLightPercent: Int by property(50)
         var functionDarkPercent: Int by property(50)
         var functionBold: Boolean by property(true)
@@ -116,6 +150,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         // furthest from its declaration -- the label is exactly what it is needed for.
 
         var accentNamespaces: Boolean by property(true)
+        var namespaceBraces: Boolean by property(true)
         var namespaceLightPercent: Int by property(50)
         var namespaceDarkPercent: Int by property(50)
         var namespaceBold: Boolean by property(true)
@@ -162,6 +197,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         }
         if (kind == BlockKind.TYPE && state.accentTypes) {
             return AccentConfig(
+                showBraces = state.typeBraces,
                 lightPercent = state.typeLightPercent,
                 darkPercent = state.typeDarkPercent,
                 bold = state.typeBold,
@@ -176,6 +212,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         }
         if (kind == BlockKind.FUNCTION && state.accentFunctions) {
             return AccentConfig(
+                showBraces = state.functionBraces,
                 lightPercent = state.functionLightPercent,
                 darkPercent = state.functionDarkPercent,
                 bold = state.functionBold,
@@ -190,6 +227,7 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         }
         if (kind == BlockKind.NAMESPACE && state.accentNamespaces) {
             return AccentConfig(
+                showBraces = state.namespaceBraces,
                 lightPercent = state.namespaceLightPercent,
                 darkPercent = state.namespaceDarkPercent,
                 bold = state.namespaceBold,

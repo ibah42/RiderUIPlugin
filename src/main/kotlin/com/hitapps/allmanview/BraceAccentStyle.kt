@@ -111,29 +111,14 @@ class BraceAccentStyle(
         if (accent.keyword.isEmpty()) {
             return false
         }
-        // Deliberately not marksAsNested: switching the `nest` marker off should silence that
-        // one word, not take the block's name away with it. A nested block is exactly the one
-        // whose own declaration is hardest to find by scrolling, so it keeps its label whatever
-        // the marker setting says.
-        if (isNestedBlock(accent)) {
+        // Deliberately not marksAsNested: the `nest` word and "name a nested block at all"
+        // are two switches, not one. A nested block's own declaration is the hardest to find by
+        // scrolling, which is why it may be named whatever its length -- with or without the
+        // word `nest` in front of it.
+        if (settings.state.nestedLabelAlways && isNestedBlock(accent)) {
             return true
         }
         return accent.spannedLines >= config.labelMinLines
-    }
-
-    /**
-     * The declaration line of a nested block also gets a `nest` marker before it, in the same
-     * colour as the prefix on its end-of-block label.
-     */
-    fun needsNestedMarker(accent: BraceAccent): Boolean {
-        if (!accent.isOpening) {
-            return false
-        }
-        if (!marksAsNested(accent)) {
-            return false
-        }
-        val config = settings.accentFor(accent.kind)
-        return config != null && config.showLabel
     }
 
     /**
@@ -157,6 +142,17 @@ class BraceAccentStyle(
      */
     private fun isNestedBlock(accent: BraceAccent): Boolean {
         return accent.isNested && !accent.isLambda
+    }
+
+    /** Whether the braces themselves are decorated -- separate from whether the block is named. */
+    fun showsBraces(accent: BraceAccent): Boolean {
+        val config = settings.accentFor(accent.kind)
+        return config != null && config.showBraces
+    }
+
+    /** The `[N]` ordinal's own colour: the keyword colour, with its own distance to grey. */
+    fun siblingOrdinalColor(offset: Int): Color {
+        return ColorBalance.towardsGrey(keywordColorAt(offset), settings.state.siblingGreyPercent)
     }
 
     /**
@@ -233,13 +229,19 @@ class BraceAccentStyle(
             return ""
         }
         if (accent.isLambda) {
-            return LAMBDA_SYMBOL
+            if (settings.state.lambdaSymbolEnabled) {
+                return LAMBDA_SYMBOL
+            }
+            return ""
         }
         return accent.keyword
     }
 
     /** The symbol's own name, exactly as written -- empty when the accent names no symbol. */
     private fun nameText(accent: BraceAccent): String {
+        if (accent.isLambda && !settings.state.lambdaNameEnabled) {
+            return ""
+        }
         if (accent.nameOffset < 0 || accent.nameLength <= 0) {
             return ""
         }

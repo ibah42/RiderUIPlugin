@@ -218,7 +218,9 @@ class AllmanController(private val editor: Editor) : Disposable {
 
         val styles = HashMap<Int, BraceStyle>()
         for (accent in result.accents) {
-            if (accent.offset !in painted) {
+            // A phantom brace is the brace, visually -- so it follows the same "colour the
+            // braces" switch the real one does, not merely the kind being recognised.
+            if (accent.offset !in painted || !style.showsBraces(accent)) {
                 continue
             }
             val braceStyle = style.styleFor(accent)
@@ -236,6 +238,11 @@ class AllmanController(private val editor: Editor) : Disposable {
             expandInlineBlocks = settings.state.expandInlineBlocks,
             accentTypes = settings.state.accentBraces && settings.state.accentTypes,
             accentFunctions = settings.state.accentBraces && settings.state.accentFunctions,
+            accentMethods = settings.state.accentMethods,
+            accentConstructors = settings.state.accentConstructors,
+            accentProperties = settings.state.accentProperties,
+            accentAccessors = settings.state.accentAccessors,
+            accentLambdas = settings.state.accentLambdas,
             accentNamespaces = settings.state.accentBraces && settings.state.accentNamespaces,
         )
     }
@@ -308,7 +315,7 @@ class AllmanController(private val editor: Editor) : Disposable {
                 continue
             }
 
-            if (accent.offset !in dimmedBraces) {
+            if (style.showsBraces(accent) && accent.offset !in dimmedBraces) {
                 addHighlighter(
                     accent.offset,
                     accent.offset + 1,
@@ -319,8 +326,12 @@ class AllmanController(private val editor: Editor) : Disposable {
                 addShadow(accent.offset, braceStyle)
             }
 
-            if (style.needsLabel(accent)) {
-                addLabel(accent, style, braceStyle)
+            if (accent.isOpening) {
+                continue
+            }
+            val segments = endOfBlockSegments(style, accent, braceStyle)
+            if (segments.isNotEmpty()) {
+                addLabel(accent, segments)
             }
         }
     }
@@ -340,34 +351,62 @@ class AllmanController(private val editor: Editor) : Disposable {
             if (!accent.isOpening) {
                 continue
             }
-            val markerText = declarationLineMarkerText(style, accent)
-            if (markerText.isEmpty()) {
-                continue
-            }
             val headerOffset = headerOffsetOf(accent)
             if (headerOffset >= documentLength) {
                 continue
             }
+
             val contentOffset = contentStartOffset(headerOffset)
-            addDeclarationLineMarker(contentOffset, markerText, style.nestedMarkerColor(contentOffset))
+            val segments = ArrayList<BlockLabelRenderer.Segment>(MARKER_SEGMENT_CAPACITY)
+            appendMarkerSegments(segments, style, accent, contentOffset)
+            if (segments.isEmpty()) {
+                continue
+            }
+            addDeclarationLineMarker(contentOffset, segments)
         }
     }
 
     /**
-     * `"[N] nest"`, `"[N]"`, `"nest"`, or `""`: the sibling ordinal and the `nest` marker, in
-     * that order, for the declaration line -- the ordinal is shown even when the block is not
-     * nested, since a top-level namespace or type can still have numbered siblings.
+     * The paired markers, in order: the sibling ordinal `[N]`, then the `nest` word. Each has
+     * its own switch and its own colour, and each is drawn in both places a marker belongs --
+     * before the declaration and again at the start of the end-of-block label -- which is why
+     * this is one function serving both.
+     *
+     * @param sampleOffset where the marker's colour is read from, so it greys out with the code
+     *   around it: the declaration itself on the opening side, the closing brace on the other
      */
-    private fun declarationLineMarkerText(style: BraceAccentStyle, accent: BraceAccent): String {
+    private fun appendMarkerSegments(
+        segments: MutableList<BlockLabelRenderer.Segment>,
+        style: BraceAccentStyle,
+        accent: BraceAccent,
+        sampleOffset: Int,
+    ) {
         val ordinalText = style.siblingOrdinalText(accent)
-        val nestText = if (style.needsNestedMarker(accent)) BraceAccentStyle.NESTED_MARKER_TEXT else ""
-        if (ordinalText.isEmpty()) {
-            return nestText
+        if (ordinalText.isNotEmpty()) {
+            appendSegment(segments, ordinalText, style.siblingOrdinalColor(sampleOffset))
         }
-        if (nestText.isEmpty()) {
-            return ordinalText
+        if (style.marksAsNested(accent)) {
+            appendSegment(
+                segments,
+                BraceAccentStyle.NESTED_MARKER_TEXT,
+                style.nestedMarkerColor(sampleOffset),
+            )
         }
-        return "$ordinalText $nestText"
+    }
+
+    /** Adds a run, separated by a single space from whatever already stands to its left. */
+    private fun appendSegment(
+        segments: MutableList<BlockLabelRenderer.Segment>,
+        text: String,
+        color: Color,
+    ) {
+        val separator: String
+        if (segments.isEmpty()) {
+            separator = ""
+        } else {
+            separator = " "
+        }
+        segments.add(BlockLabelRenderer.Segment(separator + text, color))
     }
 
     /** The declaration line, not the brace line: a multi-line signature starts well above it. */
@@ -391,12 +430,12 @@ class AllmanController(private val editor: Editor) : Disposable {
         return end
     }
 
-    private fun addDeclarationLineMarker(offset: Int, text: String, color: Color) {
+    private fun addDeclarationLineMarker(offset: Int, segments: List<BlockLabelRenderer.Segment>) {
         val inlay = editor.inlayModel.addInlineElement(
             offset,
             /* relatesToPrecedingText = */ false,
             BlockLabelRenderer(
-                segments = listOf(BlockLabelRenderer.Segment(text, color)),
+                segments = segments,
                 leadingSpaces = 0,
                 trailingSpaces = 1,
             ),
@@ -428,12 +467,12 @@ class AllmanController(private val editor: Editor) : Disposable {
         accentHighlighters.add(highlighter)
     }
 
-    private fun addLabel(accent: BraceAccent, style: BraceAccentStyle, braceStyle: BraceStyle) {
+    private fun addLabel(accent: BraceAccent, segments: List<BlockLabelRenderer.Segment>) {
         val inlay = editor.inlayModel.addInlineElement(
             accent.offset + 1,
             /* relatesToPrecedingText = */ true,
             BlockLabelRenderer(
-                segments = endOfBlockLabelSegments(style, accent, braceStyle),
+                segments = segments,
                 leadingSpaces = LABEL_LEADING_SPACES,
                 trailingSpaces = 0,
             ),
@@ -444,59 +483,32 @@ class AllmanController(private val editor: Editor) : Disposable {
     }
 
     /**
-     * Up to three runs, left to right: the `[N] nest` marker (its own colour, shared with the
-     * declaration-line marker), the bare construct word (`class`, `fun`, `ns`, ...) in the
-     * editor's own keyword colour, and the symbol's own name in its own real accent colour --
-     * so the label never paints `class` in the colour of a class name just because they sit
-     * side by side in the same phantom text.
+     * Every run the closing brace's inlay draws, left to right: the paired markers first, each
+     * behind its own switch, then the construct word (`class`, `fun`, `ns`, ...) in the
+     * editor's own keyword colour and the symbol's own name in its own accent colour -- those
+     * last two only when this kind of block is named at all, which is a separate switch again.
+     *
+     * An empty list means the closing brace gets no inlay: with every part switched off there
+     * would be nothing to draw in it.
      */
-    private fun endOfBlockLabelSegments(
+    private fun endOfBlockSegments(
         style: BraceAccentStyle,
         accent: BraceAccent,
         braceStyle: BraceStyle,
     ): List<BlockLabelRenderer.Segment> {
         val segments = ArrayList<BlockLabelRenderer.Segment>(LABEL_SEGMENT_CAPACITY)
+        appendMarkerSegments(segments, style, accent, accent.offset)
 
-        val markerText = endOfBlockConstructMarkerText(style, accent)
-        if (markerText.isNotEmpty()) {
-            // Sampled at the brace itself, right before the label: a closing brace inside a
-            // disabled #if branch or unreachable code is already painted grey there, and the
-            // marker should read the same way.
-            segments.add(BlockLabelRenderer.Segment(markerText + " ", style.nestedMarkerColor(accent.offset)))
+        if (!style.needsLabel(accent)) {
+            return segments
         }
-
         if (braceStyle.keywordText.isNotEmpty()) {
-            val keywordText: String
-            if (braceStyle.nameText.isEmpty()) {
-                keywordText = braceStyle.keywordText
-            } else {
-                keywordText = braceStyle.keywordText + " "
-            }
-            segments.add(BlockLabelRenderer.Segment(keywordText, braceStyle.keywordColor))
+            appendSegment(segments, braceStyle.keywordText, braceStyle.keywordColor)
         }
-
         if (braceStyle.nameText.isNotEmpty()) {
-            segments.add(BlockLabelRenderer.Segment(braceStyle.nameText, braceStyle.nameColor))
+            appendSegment(segments, braceStyle.nameText, braceStyle.nameColor)
         }
-
         return segments
-    }
-
-    /**
-     * `"[N] nest"`, `"[N]"`, `"nest"`, or `""`: the sibling ordinal and the `nest` marker, in
-     * that order -- the same ordering as [declarationLineMarkerText] uses on the opening side,
-     * so a block reads the same number in both places.
-     */
-    private fun endOfBlockConstructMarkerText(style: BraceAccentStyle, accent: BraceAccent): String {
-        val ordinalText = style.siblingOrdinalText(accent)
-        val nestText = if (style.marksAsNested(accent)) BraceAccentStyle.NESTED_MARKER_TEXT else ""
-        if (ordinalText.isEmpty()) {
-            return nestText
-        }
-        if (nestText.isEmpty()) {
-            return ordinalText
-        }
-        return "$ordinalText $nestText"
     }
 
     /**
@@ -673,8 +685,11 @@ class AllmanController(private val editor: Editor) : Disposable {
         /** Gap after the brace so the end-of-block label does not stick to it. */
         private const val LABEL_LEADING_SPACES = 2
 
-        /** The most segments an end-of-block label ever draws: the marker, the keyword, the name. */
-        private const val LABEL_SEGMENT_CAPACITY = 3
+        /** The most runs an end-of-block label draws: two markers, the keyword, the name. */
+        private const val LABEL_SEGMENT_CAPACITY = 4
+
+        /** The most runs a declaration-line marker draws: the ordinal and the `nest` word. */
+        private const val MARKER_SEGMENT_CAPACITY = 2
 
         /** The scanner is linear, but a full timed rescan of a huge file is pointless. */
         private const val MAX_FILE_CHARS = 2_000_000

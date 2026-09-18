@@ -62,6 +62,10 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                                 "under \"Accent braces\".",
                         )
                 }
+                row("\"[N]\" towards grey, %:") {
+                    spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::siblingGreyPercent)
+                        .comment("Based on the editor's keyword colour, like the other markers.")
+                }
             }.enabledIf(pluginEnabled.selected)
 
             // Every group below greys out with the master switch, so it is obvious what it controls.
@@ -144,6 +148,15 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                                     "block's own length.",
                             )
                     }
+                    row {
+                        checkBox("Label a nested block whatever its length")
+                            .bindSelected(config::nestedLabelAlways)
+                            .comment(
+                                "Ignores the per-kind minimum below. Separate from the word " +
+                                    "itself: a nested block's own declaration is the hardest " +
+                                    "to find by scrolling, with or without \"nest\" in front.",
+                            )
+                    }
                     row("\"nest\" marker towards grey, %:") {
                         spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::nestedLabelGreyPercent)
                             .comment("Based on the editor's keyword colour, not the block's own accent.")
@@ -161,38 +174,50 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
 
                     rowsRange {
                         row {
-                            label("Brace").bold()
+                            label("Braces").bold()
                         }
-                        row("Towards black on a light scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeLightPercent)
-                        }
-                        row("Towards white on a dark scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeDarkPercent)
-                        }
+                        lateinit var typeBraces: Cell<JBCheckBox>
                         row {
-                            checkBox("Bold").bindSelected(config::typeBold)
-                        }
-
-                        row {
-                            label("Shadow").bold()
-                        }
-                        lateinit var typeShadow: Cell<JBCheckBox>
-                        row {
-                            typeShadow = checkBox("Shadow").bindSelected(config::typeShadow)
+                            typeBraces = checkBox("Colour the braces")
+                                .bindSelected(config::typeBraces)
+                                .comment(
+                                    "The { and } themselves -- colour, weight and "  +
+                                        "shadow. Independent of the label below: "  +
+                                        "either can be on without the other.",
+                                )
                         }
                         rowsRange {
-                            row("Shadow strength, %:") {
-                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeShadowPercent)
-                                    .comment("0 hides the shadow, 100 makes it solid grey.")
+                            row("Towards black on a light scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeLightPercent)
                             }
-                            row("Shadow offset, px:") {
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetX)
-                                label("X")
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetY)
-                                label("Y")
-                                    .comment("X=1, Y=0 gives faux bold instead of depth.")
+                            row("Towards white on a dark scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeDarkPercent)
                             }
-                        }.enabledIf(typeShadow.selected)
+                            row {
+                                checkBox("Bold").bindSelected(config::typeBold)
+                            }
+
+                            row {
+                                label("Shadow").bold()
+                            }
+                            lateinit var typeShadow: Cell<JBCheckBox>
+                            row {
+                                typeShadow = checkBox("Shadow").bindSelected(config::typeShadow)
+                            }
+                            rowsRange {
+                                row("Shadow strength, %:") {
+                                    spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::typeShadowPercent)
+                                        .comment("0 hides the shadow, 100 makes it solid grey.")
+                                }
+                                row("Shadow offset, px:") {
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetX)
+                                    label("X")
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::typeShadowOffsetY)
+                                    label("Y")
+                                        .comment("X=1, Y=0 gives faux bold instead of depth.")
+                                }
+                            }.enabledIf(typeShadow.selected)
+                        }.enabledIf(typeBraces.selected)
 
                         row {
                             label("End-of-block label").bold()
@@ -219,7 +244,7 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                 rowsRange {
                     lateinit var accentFunctions: Cell<JBCheckBox>
                     row {
-                        accentFunctions = checkBox("Functions: methods and lambdas")
+                        accentFunctions = checkBox("Functions: methods, properties and lambdas")
                             .bindSelected(config::accentFunctions)
                             .comment(
                                 "A lambda has no name of its own, so the colour and the label " +
@@ -228,40 +253,94 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                             )
                     }
 
+                    row {
+                        label("Which function blocks").bold()
+                    }
                     rowsRange {
                         row {
-                            label("Brace").bold()
-                        }
-                        row("Towards black on a light scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionLightPercent)
-                        }
-                        row("Towards white on a dark scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionDarkPercent)
+                            checkBox("Methods").bindSelected(config::accentMethods)
+                                .comment("fun Update")
                         }
                         row {
-                            checkBox("Bold").bindSelected(config::functionBold)
+                            checkBox("Constructors and destructors")
+                                .bindSelected(config::accentConstructors)
+                                .comment("ctor, static ctor, dtor")
                         }
-
                         row {
-                            label("Shadow").bold()
+                            checkBox("Properties").bindSelected(config::accentProperties)
+                                .comment("prop Name -- the property's own braces, not its accessors.")
                         }
-                        lateinit var functionShadow: Cell<JBCheckBox>
                         row {
-                            functionShadow = checkBox("Shadow").bindSelected(config::functionShadow)
+                            checkBox("Accessors").bindSelected(config::accentAccessors)
+                                .comment("get, set, init -- the accessor bodies inside a property.")
+                        }
+                        lateinit var accentLambdas: Cell<JBCheckBox>
+                        row {
+                            accentLambdas = checkBox("Lambdas").bindSelected(config::accentLambdas)
                         }
                         rowsRange {
-                            row("Shadow strength, %:") {
-                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionShadowPercent)
-                                    .comment("0 hides the shadow, 100 makes it solid grey.")
+                            row {
+                                checkBox("Show the lambda symbol")
+                                    .bindSelected(config::lambdaSymbolEnabled)
+                                    .comment("\u03bb -- a lambda has no declaration to be a fun of.")
                             }
-                            row("Shadow offset, px:") {
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetX)
-                                label("X")
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetY)
-                                label("Y")
-                                    .comment("X=1, Y=0 gives faux bold instead of depth.")
+                            row {
+                                checkBox("Show the borrowed name")
+                                    .bindSelected(config::lambdaNameEnabled)
+                                    .comment(
+                                        "The method the lambda is passed to, or the assignment " +
+                                            "target. With both off a lambda gets no label at all.",
+                                    )
                             }
-                        }.enabledIf(functionShadow.selected)
+                        }.enabledIf(accentLambdas.selected)
+                    }.enabledIf(accentFunctions.selected)
+
+                    rowsRange {
+                        row {
+                            label("Braces").bold()
+                        }
+                        lateinit var functionBraces: Cell<JBCheckBox>
+                        row {
+                            functionBraces = checkBox("Colour the braces")
+                                .bindSelected(config::functionBraces)
+                                .comment(
+                                    "The { and } themselves -- colour, weight and "  +
+                                        "shadow. Independent of the label below: "  +
+                                        "either can be on without the other.",
+                                )
+                        }
+                        rowsRange {
+                            row("Towards black on a light scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionLightPercent)
+                            }
+                            row("Towards white on a dark scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionDarkPercent)
+                            }
+                            row {
+                                checkBox("Bold").bindSelected(config::functionBold)
+                            }
+
+                            row {
+                                label("Shadow").bold()
+                            }
+                            lateinit var functionShadow: Cell<JBCheckBox>
+                            row {
+                                functionShadow = checkBox("Shadow").bindSelected(config::functionShadow)
+                            }
+                            rowsRange {
+                                row("Shadow strength, %:") {
+                                    spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::functionShadowPercent)
+                                        .comment("0 hides the shadow, 100 makes it solid grey.")
+                                }
+                                row("Shadow offset, px:") {
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetX)
+                                    label("X")
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::functionShadowOffsetY)
+                                    label("Y")
+                                        .comment("X=1, Y=0 gives faux bold instead of depth.")
+                                }
+                            }.enabledIf(functionShadow.selected)
+                        }.enabledIf(functionBraces.selected)
 
                         row {
                             label("End-of-block label").bold()
@@ -299,42 +378,54 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
 
                     rowsRange {
                         row {
-                            label("Brace").bold()
+                            label("Braces").bold()
                         }
-                        row("Towards black on a light scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceLightPercent)
-                        }
-                        row("Towards white on a dark scheme, %:") {
-                            spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceDarkPercent)
+                        lateinit var namespaceBraces: Cell<JBCheckBox>
+                        row {
+                            namespaceBraces = checkBox("Colour the braces")
+                                .bindSelected(config::namespaceBraces)
                                 .comment(
-                                    "With no name to sample, the colour starts from the " +
-                                        "editor's keyword colour.",
+                                    "The { and } themselves -- colour, weight and "  +
+                                        "shadow. Independent of the label below: "  +
+                                        "either can be on without the other.",
                                 )
                         }
-                        row {
-                            checkBox("Bold").bindSelected(config::namespaceBold)
-                        }
-
-                        row {
-                            label("Shadow").bold()
-                        }
-                        lateinit var namespaceShadow: Cell<JBCheckBox>
-                        row {
-                            namespaceShadow = checkBox("Shadow").bindSelected(config::namespaceShadow)
-                        }
                         rowsRange {
-                            row("Shadow strength, %:") {
-                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceShadowPercent)
-                                    .comment("0 hides the shadow, 100 makes it solid grey.")
+                            row("Towards black on a light scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceLightPercent)
                             }
-                            row("Shadow offset, px:") {
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetX)
-                                label("X")
-                                spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetY)
-                                label("Y")
-                                    .comment("X=1, Y=0 gives faux bold instead of depth.")
+                            row("Towards white on a dark scheme, %:") {
+                                spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceDarkPercent)
+                                    .comment(
+                                        "With no name to sample, the colour starts from the " +
+                                            "editor's keyword colour.",
+                                    )
                             }
-                        }.enabledIf(namespaceShadow.selected)
+                            row {
+                                checkBox("Bold").bindSelected(config::namespaceBold)
+                            }
+
+                            row {
+                                label("Shadow").bold()
+                            }
+                            lateinit var namespaceShadow: Cell<JBCheckBox>
+                            row {
+                                namespaceShadow = checkBox("Shadow").bindSelected(config::namespaceShadow)
+                            }
+                            rowsRange {
+                                row("Shadow strength, %:") {
+                                    spinner(PERCENT_RANGE, PERCENT_STEP).bindIntValue(config::namespaceShadowPercent)
+                                        .comment("0 hides the shadow, 100 makes it solid grey.")
+                                }
+                                row("Shadow offset, px:") {
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetX)
+                                    label("X")
+                                    spinner(SHADOW_OFFSET_RANGE, SHADOW_OFFSET_STEP).bindIntValue(config::namespaceShadowOffsetY)
+                                    label("Y")
+                                        .comment("X=1, Y=0 gives faux bold instead of depth.")
+                                }
+                            }.enabledIf(namespaceShadow.selected)
+                        }.enabledIf(namespaceBraces.selected)
 
                         row {
                             label("End-of-block label").bold()
