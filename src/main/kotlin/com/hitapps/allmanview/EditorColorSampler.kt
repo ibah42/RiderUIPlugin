@@ -77,12 +77,70 @@ object EditorColorSampler {
         return result
     }
 
-    /** Colour of a single character — for example the class name a brace takes its colour from. */
+    /**
+     * Colour of a single character -- for example the class name a brace takes its colour from.
+     *
+     * Deliberately not `styleOf(editor, offset, 1)`: this is the most-called thing in the
+     * plugin (every accent asks for one or two colours, on every redraw), and going through the
+     * run-based path would allocate two arrays and a list and sort that list, all to read one
+     * colour. The answer is the same -- the highest-layer markup that actually covers [offset]
+     * and carries a foreground, and the lexer's own colour when no markup does -- it is just
+     * found by keeping the best candidate instead of sorting every candidate.
+     */
     fun foregroundAt(editor: Editor, offset: Int): Color? {
         if (offset < 0 || offset >= editor.document.textLength) {
             return null
         }
-        return styleOf(editor, offset, 1).colors[0]
+
+        var foreground = lexerForegroundAt(editor, offset)
+        val project = editor.project
+        if (project == null) {
+            return foreground
+        }
+
+        val markup = DocumentMarkupModel.forDocument(editor.document, project, false)
+        if (markup !is MarkupModelEx) {
+            return foreground
+        }
+
+        val scheme = editor.colorsScheme
+        // `>=`, not `>`: among equal layers the last one wins, which is what sorting by layer
+        // and applying in order does in styleOf, since that sort is stable.
+        var topLayer = Int.MIN_VALUE
+        markup.processRangeHighlightersOverlappingWith(offset, offset + 1) { highlighter ->
+            if (covers(highlighter, offset) && highlighter.layer >= topLayer) {
+                val candidate = attributesOf(highlighter, scheme)?.foregroundColor
+                if (candidate != null) {
+                    foreground = candidate
+                    topLayer = highlighter.layer
+                }
+            }
+            true
+        }
+        return foreground
+    }
+
+    /**
+     * "Overlapping" includes a highlighter that only touches the one-character window without
+     * containing [offset] itself. [TextStyleRun.apply] drops those by intersecting the ranges;
+     * here the same is done up front.
+     */
+    private fun covers(highlighter: RangeHighlighterEx, offset: Int): Boolean {
+        return highlighter.startOffset <= offset && offset < highlighter.endOffset
+    }
+
+    /** The colour the lexer alone would paint at [offset], before any markup is laid over it. */
+    private fun lexerForegroundAt(editor: Editor, offset: Int): Color? {
+        val editorEx = editor as? EditorEx
+        if (editorEx == null) {
+            return null
+        }
+
+        val iterator = editorEx.highlighter.createIterator(offset)
+        if (iterator.atEnd()) {
+            return null
+        }
+        return iterator.textAttributes?.foregroundColor
     }
 
     private fun applyLexerAttributes(

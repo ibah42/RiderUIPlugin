@@ -94,8 +94,28 @@ data class ScanOptions(
     /** Mark type braces: class, struct, interface, enum, record. */
     val accentTypes: Boolean = true,
 
-    /** Mark braces of functions, methods, constructors and lambdas. */
+    /**
+     * Master switch for every kind of function block. The five flags below narrow it further:
+     * each one decides whether that sub-kind is a block the scanner reports at all, so turning
+     * one off removes its colour and its shadow along with its label, and takes it out of the
+     * nesting and sibling bookkeeping too.
+     */
     val accentFunctions: Boolean = true,
+
+    /** Ordinary methods and local functions -- the `fun` label. */
+    val accentMethods: Boolean = true,
+
+    /** Constructors, static constructors and destructors -- `ctor`, `static ctor`, `dtor`. */
+    val accentConstructors: Boolean = true,
+
+    /** A property's own block -- the `prop` label, not its accessors. */
+    val accentProperties: Boolean = true,
+
+    /** Property accessor bodies -- `get`, `set`, `init`. */
+    val accentAccessors: Boolean = true,
+
+    /** Lambda and anonymous-delegate bodies. */
+    val accentLambdas: Boolean = true,
 
     /** Mark namespace braces. */
     val accentNamespaces: Boolean = true,

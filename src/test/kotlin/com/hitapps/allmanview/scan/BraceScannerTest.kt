@@ -590,6 +590,28 @@ class BraceScannerTest {
     }
 
     @Test
+    fun `a default parameter value's equals sign is not mistaken for an initializer assignment`() {
+        val src = "public void Handle(int id, string reason = \"\") {\n}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("Handle", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a constructor with several default parameter values is still recognised`() {
+        val src = "public HttpResponse(\n" +
+            "    TResponse response,\n" +
+            "    long responseCode,\n" +
+            "    ErrorType errorType = ErrorType.None,\n" +
+            "    string errorMessage = \"\",\n" +
+            "    string errorCode = \"\")\n" +
+            "{\n" +
+            "}"
+        assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
+        assertEquals("ctor", accents(src).first().keyword)
+        assertEquals("HttpResponse", accentName(src, accents(src).first()))
+    }
+
+    @Test
     fun `multi-line signature is recognised`() {
         val src = "private static void Handle(\n    int id,\n    bool flag) {\n}"
         assertEquals(BlockKind.FUNCTION, accents(src).first().kind)
@@ -1272,5 +1294,95 @@ class BraceScannerTest {
             .sortedBy { it.offset }
         assertEquals(listOf("Config", "State"), serviceChildren.map { accentName(src, it) })
         assertEquals(listOf(1, 2), serviceChildren.map { it.siblingOrdinal })
+    }
+
+    // ------------------------------------- each kind of function block has its own switch
+
+    /** Every sub-kind at once, so one source serves all the switch tests below. */
+    private fun everyFunctionKind(): String {
+        return "" +
+            "class Holder\n{\n" +
+            "    public string Name\n    {\n" +
+            "        get\n        {\n        }\n" +
+            "        set\n        {\n        }\n" +
+            "    }\n" +
+            "    public Holder()\n    {\n    }\n" +
+            "    static Holder()\n    {\n    }\n" +
+            "    ~Holder()\n    {\n    }\n" +
+            "    void Work()\n    {\n        Run(() =>\n        {\n        });\n    }\n" +
+            "}\n"
+    }
+
+    private fun openingKeywords(src: String, options: ScanOptions): List<String> {
+        return BraceScanner(src, Flavor.CSHARP, options).scan()
+            .accents
+            .filter { it.isOpening }
+            .map { it.keyword }
+    }
+
+    @Test
+    fun `by default every kind of function block is reported`() {
+        val keywords = openingKeywords(everyFunctionKind(), ScanOptions())
+        assertTrue("prop" in keywords)
+        assertTrue("get" in keywords)
+        assertTrue("set" in keywords)
+        assertTrue("ctor" in keywords)
+        assertTrue("static ctor" in keywords)
+        assertTrue("dtor" in keywords)
+        assertTrue("fun" in keywords)
+    }
+
+    @Test
+    fun `accentAccessors=false drops get and set but keeps the property itself`() {
+        val keywords = openingKeywords(everyFunctionKind(), ScanOptions(accentAccessors = false))
+        assertTrue("get" !in keywords)
+        assertTrue("set" !in keywords)
+        assertTrue("prop" in keywords)
+    }
+
+    @Test
+    fun `accentProperties=false drops the property but keeps its accessors`() {
+        val keywords = openingKeywords(everyFunctionKind(), ScanOptions(accentProperties = false))
+        assertTrue("prop" !in keywords)
+        assertTrue("get" in keywords)
+        assertTrue("set" in keywords)
+    }
+
+    @Test
+    fun `accentConstructors=false drops ctor, static ctor and dtor but keeps methods`() {
+        val keywords = openingKeywords(everyFunctionKind(), ScanOptions(accentConstructors = false))
+        assertTrue("ctor" !in keywords)
+        assertTrue("static ctor" !in keywords)
+        assertTrue("dtor" !in keywords)
+        assertTrue("fun" in keywords)
+    }
+
+    @Test
+    fun `accentMethods=false drops methods but keeps constructors`() {
+        val src = everyFunctionKind()
+        val accents = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentMethods = false))
+            .scan().accents.filter { it.isOpening }
+        assertTrue(accents.none { it.keyword == "fun" && !it.isLambda })
+        assertTrue(accents.any { it.keyword == "ctor" })
+    }
+
+    @Test
+    fun `accentLambdas=false drops the lambda but keeps the method holding it`() {
+        val src = everyFunctionKind()
+        val accents = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentLambdas = false))
+            .scan().accents.filter { it.isOpening }
+        assertTrue(accents.none { it.isLambda })
+        assertTrue(accents.any { it.keyword == "fun" })
+    }
+
+    @Test
+    fun `a rejected sub-kind is not a block at all, so it cannot make a sibling nested`() {
+        // The property is gone, so its accessors are no longer nested inside anything of their
+        // own kind -- proof the switch removes the block rather than only its label.
+        val src = everyFunctionKind()
+        val accents = BraceScanner(src, Flavor.CSHARP, ScanOptions(accentProperties = false))
+            .scan().accents.filter { it.isOpening && it.keyword == "get" }
+        assertEquals(1, accents.size)
+        assertTrue(!accents[0].isNested)
     }
 }

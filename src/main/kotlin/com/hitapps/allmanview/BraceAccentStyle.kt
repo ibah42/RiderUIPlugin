@@ -111,7 +111,11 @@ class BraceAccentStyle(
         if (accent.keyword.isEmpty()) {
             return false
         }
-        if (marksAsNested(accent)) {
+        // Deliberately not marksAsNested: switching the `nest` marker off should silence that
+        // one word, not take the block's name away with it. A nested block is exactly the one
+        // whose own declaration is hardest to find by scrolling, so it keeps its label whatever
+        // the marker setting says.
+        if (isNestedBlock(accent)) {
             return true
         }
         return accent.spannedLines >= config.labelMinLines
@@ -143,6 +147,15 @@ class BraceAccentStyle(
         if (!settings.state.nestedMarkerEnabled) {
             return false
         }
+        return isNestedBlock(accent)
+    }
+
+    /**
+     * A block nested inside another of its own kind, lambdas aside -- the shape of the thing,
+     * with no setting in it. [marksAsNested] adds the marker's own switch on top; [needsLabel]
+     * deliberately does not, so the two can be turned off independently.
+     */
+    private fun isNestedBlock(accent: BraceAccent): Boolean {
         return accent.isNested && !accent.isLambda
     }
 

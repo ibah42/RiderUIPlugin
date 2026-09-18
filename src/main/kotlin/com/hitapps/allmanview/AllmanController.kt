@@ -1,6 +1,5 @@
 package com.hitapps.allmanview
 
-import com.hitapps.allmanview.scan.BlockKind
 import com.hitapps.allmanview.scan.BraceAccent
 import com.hitapps.allmanview.scan.BraceScanner
 import com.hitapps.allmanview.scan.Dialects
@@ -49,6 +48,12 @@ class AllmanController(private val editor: Editor) : Disposable {
 
     /** The colour mechanic's own inlays (declaration-line markers and end-of-block labels). */
     private val accentInlays = ArrayList<Inlay<*>>()
+
+    /**
+     * See [scanResult]. Kept until the text changes or the editor is disposed, which trades a
+     * scan's worth of memory per open editor for not scanning the same text twice.
+     */
+    private var cachedScan: CachedScan? = null
 
     private val moveAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
     private val accentAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
@@ -115,8 +120,9 @@ class AllmanController(private val editor: Editor) : Disposable {
             return
         }
 
-        val outcome = scanNow(settings, flavor)
-        paintMovedBraces(settings, outcome.result, outcome.braceStyles)
+        val result = scanResult(settings, flavor)
+        val accentStyle = BraceAccentStyle(editor, settings)
+        paintMovedBraces(settings, result, phantomBraceStyles(accentStyle, result))
     }
 
     /** Brace colour and shadow, the end-of-block label, and the declaration-line markers. */
@@ -135,39 +141,93 @@ class AllmanController(private val editor: Editor) : Disposable {
             return
         }
 
-        val outcome = scanNow(settings, flavor)
-        paintDeclarationLineMarkers(outcome.accentStyle, outcome.result)
+        val result = scanResult(settings, flavor)
+        val accentStyle = BraceAccentStyle(editor, settings)
+
+        paintDeclarationLineMarkers(accentStyle, result)
         paintRealBraces(
-            outcome.accentStyle,
-            outcome.result,
-            outcome.braceStyles,
-            dimmedBraceOffsets(settings, outcome.result),
+            accentStyle,
+            result,
+            buildBraceStyles(accentStyle, result),
+            dimmedBraceOffsets(settings, result),
         )
     }
 
     /**
-     * One scan plus the per-brace styling both halves paint from. Computing it is pure text
-     * processing with no editor calls in it, so each half doing this independently on its own
-     * timer costs nothing next to the highlighter/inlay churn the two timers exist to keep
-     * apart -- see the class doc on [MOVE_REFRESH_DELAY_MS].
+     * The scan both halves read, reused when they ask for the same text twice.
+     *
+     * The two timers fire at different moments but almost always over the very same document:
+     * type once, and the move half scans at 200ms while the colour half scans again at 600ms.
+     * Scanning is linear but not free -- about 90ms at the [MAX_FILE_CHARS] ceiling -- and
+     * doing it twice put that on the EDT twice for one keystroke.
+     *
+     * Only the [ScanResult] is cached, never the styling built from it: a scan is a pure
+     * function of the text and the options, while a colour is sampled from the editor and can
+     * change with no edit at all -- the ReSharper backend answering late, or the colour scheme
+     * switching. Caching those too would freeze stale colours until the next keystroke.
      */
-    private fun scanNow(settings: AllmanSettings, flavor: Flavor): ScanOutcome {
+    private fun scanResult(settings: AllmanSettings, flavor: Flavor): ScanResult {
+        val options = scanOptions(settings)
+        val modificationStamp = editor.document.modificationStamp
+
+        val cached = cachedScan
+        if (cached != null && cached.modificationStamp == modificationStamp && cached.options == options) {
+            return cached.result
+        }
+
         val result = BraceScanner(
             editor.document.immutableCharSequence,
             flavor,
-            scanOptions(settings),
+            options,
         ).scan()
-
-        val accentStyle = BraceAccentStyle(editor, settings)
-        val braceStyles = buildBraceStyles(accentStyle, result)
-        return ScanOutcome(result, accentStyle, braceStyles)
+        cachedScan = CachedScan(modificationStamp, options, result)
+        return result
     }
 
-    private data class ScanOutcome(
+    private class CachedScan(
+        val modificationStamp: Long,
+        val options: ScanOptions,
         val result: ScanResult,
-        val accentStyle: BraceAccentStyle,
-        val braceStyles: Map<Int, BraceStyle>,
     )
+
+    /**
+     * Styles for the braces a phantom line actually redraws, and no others.
+     *
+     * [PhantomLineRenderer] looks a style up by document offset for every character it paints,
+     * and nothing else in this half uses one -- so styling every accent, as the colour half
+     * must, would sample a colour per accent and then throw nearly all of them away. In a file
+     * already written in Allman style there are no phantom lines at all, and every one of those
+     * samples would be wasted.
+     */
+    private fun phantomBraceStyles(
+        style: BraceAccentStyle,
+        result: ScanResult,
+    ): Map<Int, BraceStyle> {
+        if (result.sites.isEmpty() || result.accents.isEmpty()) {
+            return emptyMap()
+        }
+
+        val painted = HashSet<Int>()
+        for (site in result.sites) {
+            for (line in site.phantomLines) {
+                for (offset in line.sourceOffset until line.sourceOffset + line.text.length) {
+                    painted.add(offset)
+                }
+            }
+        }
+
+        val styles = HashMap<Int, BraceStyle>()
+        for (accent in result.accents) {
+            if (accent.offset !in painted) {
+                continue
+            }
+            val braceStyle = style.styleFor(accent)
+            if (braceStyle != null) {
+                styles[accent.offset] = braceStyle
+            }
+        }
+        return styles
+    }
 
     private fun scanOptions(settings: AllmanSettings): ScanOptions {
         return ScanOptions(
@@ -571,6 +631,7 @@ class AllmanController(private val editor: Editor) : Disposable {
 
     override fun dispose() {
         editor.putUserData(KEY, null)
+        cachedScan = null
         if (!editor.isDisposed) {
             clearMove()
             clearAccent()

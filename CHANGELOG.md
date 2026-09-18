@@ -2,6 +2,17 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.6.1
+
+- Fixed: a function, constructor or property with a default parameter value in its parameter
+  list (`string errorMessage = ""`, `ErrorType errorType = ErrorType.None`) was not coloured at
+  all. Two compounding causes: the initializer-assignment check looked for `=` across the whole
+  header, including inside the parameter list, so any default value made the declaration look
+  like `var a = new Foo() {`; and separately, the header was being truncated at its first `"`
+  (a rule meant only for the namespace/type keyword search, to stop a literal like `"class"` from
+  being read as a real keyword), which chopped off a string-literal default value and everything
+  after it, including the closing `)`.
+
 ## 1.6.0
 
 - Constructors, destructors, static constructors and properties are now recognised and coloured
@@ -40,7 +51,73 @@ One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", f
   on its closing brace, so it is easy to tell which member is which without scrolling back up to
   its header. Functions and lambdas are never numbered.
 
-## Before 1.5.0
+## 1.4.1
 
-Not logged -- this changelog started at 1.5.0. Earlier changes exist in the plugin's history but
-were not recorded version by version.
+- Markers now follow the editor's own dimming. In a switched-off `#if` branch, or in unreachable
+  code, the IDE paints everything grey -- but `ns` and `nest` stayed brightly coloured, the only
+  coloured thing left on an otherwise grey screen, because their colour was read from the colour
+  scheme's keyword attribute, which knows nothing about `#if`. They are now sampled from the
+  construct's own keyword in the document, falling back to the scheme only when nothing is
+  painted there. A type or function label already behaved correctly, since it samples the
+  declaration's name.
+- Fixed: a generic method whose `where` constraint sat on its own line lost its declaration
+  entirely and was never coloured or labelled. By the time the constraint is its own line, the
+  parameter list's parentheses have already closed, so the line looked like the start of a fresh
+  statement and the header was truncated down to the constraint clause -- taking the method's
+  name and return type with it.
+
+## 1.4.0
+
+- Removed the fence mechanic: the `>>~~~ class Foo ~~~>>` phantom lines drawn above and below a
+  nested block, and every setting belonging to them. Nested blocks are marked inline instead --
+  the fences looked crooked and said in two full lines what a word can say.
+- Nested blocks are now always labelled on their closing brace, whatever their length, and carry
+  a `nest` marker before their declaration and at the start of that label. Lambdas are excluded:
+  they are short and everywhere, so marking every one of them would be noise.
+- Namespaces became a block kind of their own. Their braces get the same colour, weight, shadow
+  and label as types and functions, and the closing brace always carries a bare `ns` -- no name,
+  no minimum length. A namespace wraps the whole file, so its closing brace is by definition the
+  one furthest from its declaration, which is exactly when a label earns its place.
+- A lambda's label shows the lambda symbol instead of `fun`: it has no declaration of its own to
+  be a `fun` of, and lambda calculus already owns the glyph.
+- The settings panel was reorganised: bold subsection headings instead of one flat list, and the
+  per-kind checkboxes now actually grey out everything beneath them -- previously "Types" could
+  be off while all of its colour, shadow and label settings stayed live and clickable. Shadow and
+  label sub-settings are likewise gated on their own checkbox.
+- Performance: deciding whether a brace had already been dimmed by the move mechanic walked every
+  phantom site for every brace -- O(braces x sites) on every keystroke, on the EDT. The dimmed
+  braces are collected once per redraw instead.
+- Fixed: a brace's shadow was always drawn in the bold font, so with "Bold" off the shadow was a
+  wider silhouette than the glyph sitting on it and read as a smear rather than as depth.
+- Fixed: an end-of-block label's width was measured by counting columns of a plain space while
+  the label itself is painted in italic, so its tail could be clipped by a few pixels.
+- Internals: the colour-mixing formula and its `100` now live in one place (`ColorBalance`)
+  instead of three copies of the formula and two of the constant; and the scanner's single
+  1688-line file was split into `ScanModel` (the data it speaks in), `HeaderReader` (pure text
+  helpers over a declaration header), `BlockClassifier` (what a header declares) and
+  `BraceScanner` (lexing, line tracking, emitting). The public API did not change and the tests
+  were not touched -- they are what proved the split safe.
+
+## 1.1.0 - 1.3.0
+
+Reconstructed, not logged at the time. These versions were never committed separately: they
+existed only in the working tree between `d77d171` (1.0.0) and `7b0393c` (1.4.0), so the exact
+boundaries between them are not recoverable. What was built across that window:
+
+- Brace accenting for types and functions: a brace takes its colour from its declaration's own
+  name as the editor actually paints it -- sampled, not guessed from an attribute key, so it
+  matches whatever ReSharper and the current scheme do -- pushed away from the background, with
+  optional bold, a drop shadow, and an end-of-block label (`}  class Foo`) for blocks past a
+  configurable length.
+- The fence mechanic for nested blocks, removed again in 1.4.0.
+- Fixed: a lambda passed to a call whose parentheses were still open had every brace in its body
+  classified against that outer call's header, so unrelated `if` and `for` blocks came out
+  coloured as types or functions. Bracket depth is now saved and reset per block.
+- Fixed: the fence colour fell back to the line-number colour, too faint to read on a light
+  scheme.
+
+## Before 1.0.0
+
+From commit subjects only: the initial plugin, settings and configuration, correct handling of
+indented strings, brace colouring with end-of-block comments, and at 1.0.0 the translation of all
+UI text, documentation and code comments to English.

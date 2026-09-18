@@ -58,9 +58,44 @@ internal class BlockClassifier(private val options: ScanOptions) {
             }
         }
         if (options.accentFunctions) {
-            return classifyFunctionHeader(header, headerStart, lineNumber)
+            // Unlike the namespace/type search above, none of this does a free keyword search,
+            // so a string literal that legitimately belongs to the declaration -- a default
+            // parameter value such as `string reason = ""` -- must survive intact here.
+            val functionHeader = HeaderReader.declarationPartKeepingLiterals(rawHeader)
+            val functionBlock = classifyFunctionHeader(functionHeader, headerStart, lineNumber)
+            if (wantsFunctionKind(functionBlock)) {
+                return functionBlock
+            }
         }
         return otherBlock(lineNumber)
+    }
+
+    /**
+     * Whether the settings still want this particular kind of function block.
+     *
+     * Asked once, of the finished block, rather than inside each of the classifiers below: the
+     * keyword is what tells the sub-kinds apart and it is only settled at the very end. A block
+     * turned down here becomes an ordinary [otherBlock], so the plugin does not merely stop
+     * labelling it -- it stops seeing it: no colour, no shadow, and no place in the nesting or
+     * sibling bookkeeping either.
+     */
+    private fun wantsFunctionKind(block: OpenBlock): Boolean {
+        if (block.kind != BlockKind.FUNCTION) {
+            return true
+        }
+        if (block.isLambda) {
+            return options.accentLambdas
+        }
+        if (block.keyword in CONSTRUCTOR_KEYWORDS) {
+            return options.accentConstructors
+        }
+        if (block.keyword == PROPERTY_KEYWORD) {
+            return options.accentProperties
+        }
+        if (block.keyword in ACCESSOR_KEYWORDS) {
+            return options.accentAccessors
+        }
+        return options.accentMethods
     }
 
     /**
@@ -153,13 +188,15 @@ internal class BlockClassifier(private val options: ScanOptions) {
         if (firstWord in NON_DECLARATION_KEYWORDS) {
             return otherBlock(lineNumber)
         }
-        if (HeaderReader.containsAssignment(header)) {
-            // `var a = new Foo() {` is an initializer, not a declaration
-            return otherBlock(lineNumber)
-        }
 
         val parenIndex = header.indexOf('(')
         if (parenIndex < 0) {
+            return otherBlock(lineNumber)
+        }
+        if (HeaderReader.containsAssignment(header.substring(0, parenIndex))) {
+            // `var a = new Foo() {` is an initializer, not a declaration. Only the part before
+            // the parameter list is checked: `void Foo(int x = 5) {` has an `=` too, and that
+            // one is a default parameter value, not an assignment the declaration is a target of.
             return otherBlock(lineNumber)
         }
 
@@ -430,6 +467,11 @@ internal class BlockClassifier(private val options: ScanOptions) {
 
         /** A property accessor's own bare keyword; there is one block kind per word. */
         val ACCESSOR_KEYWORDS = setOf("get", "set", "init")
+
+        /** Everything the "constructors" switch covers: they are one concept to a reader. */
+        val CONSTRUCTOR_KEYWORDS = setOf(
+            CONSTRUCTOR_KEYWORD, STATIC_CONSTRUCTOR_KEYWORD, DESTRUCTOR_KEYWORD,
+        )
 
         /**
          * Consumed on sight before a constructor's, a property's or an accessor's own name --

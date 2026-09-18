@@ -173,15 +173,47 @@ internal object HeaderReader {
      * The header without literals and without constraints.
      *
      * Constraints are cut before classification, otherwise `void Bind<T>(T v) where T : class {`
-     * would see the word `class` and pass as a type declaration.
+     * would see the word `class` and pass as a type declaration. Literals are cut for the same
+     * reason: `if (Check("class")) {` must not read as a type either. Safe only for a keyword
+     * search (a namespace's or a type's own keyword) -- see [declarationPartKeepingLiterals] for
+     * anything that needs the rest of the header intact, such as a default parameter value.
      */
     fun declarationPart(header: String): String {
         val withoutLiterals = header.substring(0, quoteLimit(header))
-        val whereIndex = findKeyword(withoutLiterals, WHERE_KEYWORDS)
+        val whereIndex = whereClauseIndex(header)
         if (whereIndex < 0) {
             return withoutLiterals
         }
         return withoutLiterals.substring(0, whereIndex)
+    }
+
+    /**
+     * The header without its constraint clause, but otherwise untouched -- a string literal
+     * that legitimately belongs to it, such as a default parameter value (`string reason = ""`),
+     * survives. [findKeyword] for `where` still only searches up to the first quote, exactly
+     * like [declarationPart], so a stray `where` inside a literal cannot be mistaken for a real
+     * constraint clause either.
+     *
+     * Function, constructor, destructor and property classification all use this instead of
+     * [declarationPart]: none of them does a free keyword search over the whole header, so none
+     * of them needs literals cut, and cutting them would truncate a real declaration that simply
+     * happens to have a string in it.
+     */
+    fun declarationPartKeepingLiterals(header: String): String {
+        val whereIndex = whereClauseIndex(header)
+        if (whereIndex < 0) {
+            return header
+        }
+        return header.substring(0, whereIndex)
+    }
+
+    /**
+     * Where a `where ...` constraint clause starts, searched only up to the header's first
+     * quote so a keyword-shaped word inside a string literal is never mistaken for one. -1 when
+     * there is no such clause.
+     */
+    private fun whereClauseIndex(header: String): Int {
+        return findKeyword(header.substring(0, quoteLimit(header)), WHERE_KEYWORDS)
     }
 
     /** The one constraint keyword worth cutting: what follows it is no longer the declaration. */
