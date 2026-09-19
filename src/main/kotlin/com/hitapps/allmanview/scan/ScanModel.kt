@@ -15,11 +15,34 @@ enum class Flavor {
     /** C#: `@"verbatim"`, `"""raw"""`, `$"interp"` */
     CSHARP,
 
-    /** C/C++/shaders: `R"delim(raw)delim"`, `1'000'000` */
-    CPP,
+    /**
+     * The C family: C, C++, Objective-C, Objective-C++ and the shading languages.
+     * `R"delim(raw)delim"`, `1'000'000`.
+     *
+     * One dialect rather than four because the choice cannot be made from the extension: a
+     * `.h` is C, C++ or Objective-C and nothing in its name says which, while a `.mm` is
+     * Objective-C++ and genuinely both at once. The literals are the same across all of them
+     * -- Objective-C's `@"..."` is an `@` in front of an ordinary C string -- so the only thing
+     * left to separate is the declaration shapes, and those are told apart by their own syntax
+     * rather than by the file's name. See BlockClassifier.supportsObjectiveCShapes.
+     */
+    C_FAMILY,
 
-    /** Java, Kotlin, Scala, Groovy, Swift, Dart: `"""` text blocks */
+    /** Java, Kotlin, Scala, Groovy, Dart: `"""` text blocks */
     JVM,
+
+    /**
+     * Swift: `"""` multi-line strings and `#"raw"#`, and no character literal at all --
+     * an apostrophe is not a token in Swift, so it must never open one.
+     */
+    SWIFT,
+
+    /**
+     * Rust: `r#"raw"#`, `b"bytes"`, and lifetimes. The lifetime is the reason this is a
+     * dialect of its own rather than the generic fallback: in `&'a str` the apostrophe opens
+     * nothing, and reading it as a character literal swallows the rest of the declaration.
+     */
+    RUST,
 
     /** JS, TS, Go, PHP: `` `template ${literals}` `` */
     WEB,

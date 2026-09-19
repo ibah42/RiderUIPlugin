@@ -21,6 +21,13 @@ private enum class LexerState {
     /** C++: `R"delim(...)delim"`. */
     CPP_RAW_STRING,
 
+    /**
+     * A raw string fenced by hashes, closed by the same number it opened with: Rust's
+     * `r#"..."#` and Swift's `#"..."#`. One state for both, because they differ only in what
+     * stands in front of the hashes, and that is settled before the state is entered.
+     */
+    HASH_RAW_STRING,
+
     /** `` `...` `` with `${...}` holes. */
     BACKTICK_TEMPLATE,
 }
@@ -39,6 +46,10 @@ private class LiteralPrefix(
     val dollars: Int,
     val isVerbatim: Boolean,
     val isCppRaw: Boolean,
+
+    /** Length of the `#` run in front of a hash-fenced raw string; 0 for Rust's bare `r"..."`. */
+    val hashes: Int,
+    val isHashRaw: Boolean,
 )
 
 /**
@@ -73,10 +84,23 @@ class BraceScanner(
     // Dialect capabilities, kept as flags rather than enum comparisons all over the code:
     // there are many languages, and they differ in exactly one thing, their string literals.
     private val supportsVerbatimStrings = flavor == Flavor.CSHARP
-    private val supportsTripleQuotedStrings = flavor == Flavor.CSHARP || flavor == Flavor.JVM
-    private val supportsCppRawStrings = flavor == Flavor.CPP
-    private val supportsDigitSeparatorQuote = flavor == Flavor.CPP
+    private val supportsTripleQuotedStrings =
+        flavor == Flavor.CSHARP || flavor == Flavor.JVM || flavor == Flavor.SWIFT
+    private val supportsCppRawStrings = flavor == Flavor.C_FAMILY
+    private val supportsDigitSeparatorQuote = flavor == Flavor.C_FAMILY
     private val supportsBacktickTemplates = flavor == Flavor.WEB
+
+    /** Rust's `r#"..."#` and Swift's `#"..."#`; see [LexerState.HASH_RAW_STRING]. */
+    private val supportsHashRawStrings = flavor == Flavor.SWIFT || flavor == Flavor.RUST
+
+    /**
+     * Whether an apostrophe can open anything at all. Swift has no character literal, so there
+     * a stray apostrophe -- in a comment-like banner, say -- must not swallow the line.
+     */
+    private val supportsCharacterLiterals = flavor != Flavor.SWIFT
+
+    /** Rust only: in `&'a str` the apostrophe is a lifetime, not the start of a literal. */
+    private val supportsLifetimes = flavor == Flavor.RUST
 
     private val foundSites = ArrayList<PhantomSite>()
     private val foundAccents = ArrayList<BraceAccent>()
@@ -101,7 +125,7 @@ class BraceScanner(
     private val blockStack = ArrayDeque<OpenBlock>()
 
     /** Stateless: it is handed the header slice and answers what kind of block it declares. */
-    private val classifier = BlockClassifier(options)
+    private val classifier = BlockClassifier(options, flavor)
 
     private val textLength = text.length
 
@@ -192,6 +216,9 @@ class BraceScanner(
     /** Length of the opening quote run for [LexerState.TRIPLE_QUOTED_STRING]. */
     private var rawQuoteCount = 0
 
+    /** Length of the `#` run that [LexerState.HASH_RAW_STRING] has to see again to close. */
+    private var rawHashCount = 0
+
     /** The delimiter from `R"delim(`. */
     private var cppRawDelimiter = ""
 
@@ -217,6 +244,7 @@ class BraceScanner(
                 LexerState.VERBATIM_STRING -> stepVerbatimString(current)
                 LexerState.TRIPLE_QUOTED_STRING -> stepTripleQuotedString(current)
                 LexerState.CPP_RAW_STRING -> stepCppRawString(current)
+                LexerState.HASH_RAW_STRING -> stepHashRawString(current)
                 LexerState.BACKTICK_TEMPLATE -> stepBacktickTemplate(current)
             }
         }
@@ -465,6 +493,10 @@ class BraceScanner(
             openCppRawString()
             return
         }
+        if (prefix.isHashRaw) {
+            openHashRawString(prefix.hashes)
+            return
+        }
 
         val quoteRun = countRepeated('"', position)
         if (quoteRun >= 3 && supportsTripleQuotedStrings) {
@@ -489,11 +521,16 @@ class BraceScanner(
         position++
     }
 
-    /** The prefix glued to the quote: `$`, `@`, `R`. Never reaches onto the previous line. */
+    /**
+     * The prefix glued to the quote: `$`, `@`, `R`, and the `#` run of a hash-fenced raw
+     * string. Never reaches onto the previous line.
+     */
     private fun readLiteralPrefix(): LiteralPrefix {
         var dollars = 0
         var isVerbatim = false
         var isCppRaw = false
+        var hashes = 0
+        var isHashRaw = false
         var prefixPosition = position - 1
 
         while (prefixPosition >= lineStartOffset) {
@@ -508,12 +545,54 @@ class BraceScanner(
                 prefixPosition--
                 continue
             }
+            if (prefixChar == '#' && supportsHashRawStrings) {
+                hashes++
+                prefixPosition--
+                continue
+            }
             if (prefixChar == 'R' && supportsCppRawStrings) {
                 isCppRaw = true
             }
+            // Rust spells it `r"..."` or `br#"..."#`, with the hashes optional; Swift spells it
+            // `#"..."#`, with no letter at all and the hashes doing the whole job.
+            if (supportsHashRawStrings && (prefixChar == 'r' || prefixChar == 'b')) {
+                isHashRaw = true
+            }
             break
         }
-        return LiteralPrefix(dollars, isVerbatim, isCppRaw)
+        if (hashes > 0 && supportsHashRawStrings) {
+            isHashRaw = true
+        }
+        return LiteralPrefix(dollars, isVerbatim, isCppRaw, hashes, isHashRaw)
+    }
+
+    /**
+     * `r"..."`, `r#"..."#`, `#"..."#`, `#"""..."""#`: the closing run has to repeat the
+     * opening one exactly, which is the whole point of the form -- it lets the text inside hold
+     * quotes and backslashes with nothing to escape.
+     */
+    private fun openHashRawString(hashes: Int) {
+        rawHashCount = hashes
+        rawQuoteCount = countRepeated('"', position)
+        if (rawQuoteCount != TRIPLE_QUOTE_RUN) {
+            rawQuoteCount = 1
+        }
+        lexerState = LexerState.HASH_RAW_STRING
+        position += rawQuoteCount
+    }
+
+    private fun stepHashRawString(current: Char) {
+        if (current != '"') {
+            position++
+            return
+        }
+        val quoteRun = countRepeated('"', position)
+        if (quoteRun < rawQuoteCount || countRepeated('#', position + quoteRun) < rawHashCount) {
+            position += quoteRun
+            return
+        }
+        position += quoteRun + rawHashCount
+        closeStringLiteral()
     }
 
     private fun openCppRawString() {
@@ -544,12 +623,32 @@ class BraceScanner(
 
     private fun openSingleQuotedLiteral() {
         markCode(position)
-        if (isDigitSeparator()) {
+        if (isDigitSeparator() || !supportsCharacterLiterals || isLifetimeTick()) {
             position++
             return
         }
         lexerState = LexerState.CHARACTER
         position++
+    }
+
+    /**
+     * Rust: `'a`, `'static`, `'_` are lifetimes and open nothing; `'x'` and `'\n'` are
+     * character literals and do.
+     *
+     * The two are told apart by what closes them rather than by what they contain: a character
+     * literal holds exactly one character, so its closing apostrophe is two positions along, or
+     * further only when a backslash escape starts right after the opening one. Anything else is
+     * a lifetime -- and reading one as a literal would run to the next apostrophe on the line,
+     * swallowing the braces in between.
+     */
+    private fun isLifetimeTick(): Boolean {
+        if (!supportsLifetimes) {
+            return false
+        }
+        if (charRelative(1) == '\\') {
+            return false
+        }
+        return charRelative(2) != '\''
     }
 
     /** C++: in `1'000'000` the apostrophe is a digit separator, not a character literal. */
@@ -604,6 +703,7 @@ class BraceScanner(
         lexerState = LexerState.CODE
         interpolationDollars = 0
         rawQuoteCount = 0
+        rawHashCount = 0
         cppRawDelimiter = ""
     }
 
@@ -625,6 +725,7 @@ class BraceScanner(
         lexerState = LexerState.CODE
         interpolationDollars = 0
         rawQuoteCount = 0
+        rawHashCount = 0
         cppRawDelimiter = ""
     }
 
@@ -1385,6 +1486,9 @@ class BraceScanner(
 
         /** By the standard the delimiter in `R"delim(` is at most 16 characters. */
         private const val MAX_CPP_RAW_DELIMITER = 16
+
+        /** `\"\"\"`: the run length that makes a multi-line string rather than an empty one. */
+        private const val TRIPLE_QUOTE_RUN = 3
 
         /** How many brackets per line are remembered; beyond that the line is not ours. */
         private const val MAX_TRACKED_OFFSETS = 16

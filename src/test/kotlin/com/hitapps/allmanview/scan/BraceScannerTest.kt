@@ -190,12 +190,12 @@ class BraceScannerTest {
 
     @Test
     fun `cpp raw string`() {
-        assertEquals(1, scan("auto s = R\"(if (x) {\n)\";\nif (y) {\n}", Flavor.CPP).size)
+        assertEquals(1, scan("auto s = R\"(if (x) {\n)\";\nif (y) {\n}", Flavor.C_FAMILY).size)
     }
 
     @Test
     fun `cpp digit separator is not a char literal`() {
-        assertEquals(1, scan("int n = 1'000'000;\nif (x) {\n}", Flavor.CPP).size)
+        assertEquals(1, scan("int n = 1'000'000;\nif (x) {\n}", Flavor.C_FAMILY).size)
     }
 
     @Test
@@ -261,12 +261,74 @@ class BraceScannerTest {
     @Test
     fun `extensions map to dialects`() {
         assertEquals(Flavor.CSHARP, Dialects.forExtension("cs"))
-        assertEquals(Flavor.CPP, Dialects.forExtension("HPP"))
+        assertEquals(Flavor.C_FAMILY, Dialects.forExtension("HPP"))
         assertEquals(Flavor.JVM, Dialects.forExtension("kt"))
-        assertEquals(Flavor.JVM, Dialects.forExtension("swift"))
+        assertEquals(Flavor.SWIFT, Dialects.forExtension("swift"))
+        assertEquals(Flavor.RUST, Dialects.forExtension("rs"))
+        assertEquals(Flavor.C_FAMILY, Dialects.forExtension("m"))
+        assertEquals(Flavor.C_FAMILY, Dialects.forExtension("mm"))
         assertEquals(Flavor.WEB, Dialects.forExtension("go"))
-        assertEquals(Flavor.GENERIC, Dialects.forExtension("rs"))
         assertEquals(Flavor.GENERIC, Dialects.forExtension(""))
+    }
+
+    @Test
+    fun `every dialect is reachable from the default extension list`() {
+        // A flavor nothing maps to is a flavor nobody can be using, whatever its code says.
+        val reached = Dialects.DEFAULT_EXTENSIONS.split(',')
+            .map { Dialects.forExtension(it) }
+            .toSet()
+        for (flavor in Flavor.entries) {
+            if (flavor == Flavor.GENERIC) {
+                continue
+            }
+            assertTrue("no extension maps to " + flavor, flavor in reached)
+        }
+    }
+
+    // --- Swift and Rust literals -----------------------------------------------------------
+
+    @Test
+    fun `a swift raw string hides a brace`() {
+        // Multi-line on purpose: a misread single-line literal is reset at the newline by
+        // design, so only a literal that spans lines can show the dialect doing its job.
+        val src = "let s = #\"\"\"\nif (x) {\n\"\"\"#\nfunc f() {\n}\n"
+        assertEquals(1, scan(src, Flavor.SWIFT).size)
+        assertEquals(2, scan(src, Flavor.GENERIC).size)
+    }
+
+    @Test
+    fun `a swift multi-line string hides a brace`() {
+        val src = "let s = \"\"\"\nif (x) {\n\"\"\"\nfunc f() {\n}\n"
+        assertEquals(1, scan(src, Flavor.SWIFT).size)
+        assertEquals(2, scan(src, Flavor.GENERIC).size)
+    }
+
+    @Test
+    fun `an apostrophe in swift opens nothing`() {
+        // Swift has no character literal, so this must not swallow the brace behind it.
+        val src = "let s = \"it's fine\"\nfunc f() {\n}\n"
+        assertEquals(1, scan(src, Flavor.SWIFT).size)
+    }
+
+    @Test
+    fun `a rust lifetime is not a character literal`() {
+        val src = "fn longest<'a>(x: &'a str) -> &'a str {\n}\n"
+        // The braces have to survive the apostrophes: read as literals, the block is lost.
+        assertEquals(1, scan(src, Flavor.RUST).size)
+        assertEquals(0, scan(src, Flavor.GENERIC).size)
+    }
+
+    @Test
+    fun `a rust raw string hides a brace`() {
+        val src = "let s = r#\"\nif (x) {\n\"#;\nfn f() {\n}\n"
+        assertEquals(1, scan(src, Flavor.RUST).size)
+        assertEquals(2, scan(src, Flavor.GENERIC).size)
+    }
+
+    @Test
+    fun `a rust character literal still closes`() {
+        val src = "fn f() {\n    let c = 'x';\n    let n = '\\n';\n}\n"
+        assertEquals(1, scan(src, Flavor.RUST).size)
     }
 
     @Test
@@ -289,7 +351,7 @@ class BraceScannerTest {
 
     @Test
     fun `triple quote in C++ does not enable raw mode`() {
-        assertEquals(1, scan("auto s = \"\"\"\";\nvoid f() {\n}", Flavor.CPP).size)
+        assertEquals(1, scan("auto s = \"\"\"\";\nvoid f() {\n}", Flavor.C_FAMILY).size)
     }
 
     @Test
@@ -2446,6 +2508,265 @@ class BraceScannerTest {
     fun `a constructor is still a constructor when nothing precedes its name`() {
         val src = "class C\n{\n    public C(int value)\n    {\n    }\n}\n"
         assertEquals(listOf("class", "ctor"), openings(src).map { it.keyword })
+    }
+
+
+    // --- Swift, Objective-C and Rust declarations -------------------------------------------
+    //
+    // Swift and Rust lead with the kind of the declaration where the C family leads with the
+    // return type, so they are classified by their own rules; Objective-C rides on the C++
+    // dialect and adds only the two shapes C++ has none of.
+
+    private fun openingsIn(src: String, flavor: Flavor): List<BraceAccent> {
+        return BraceScanner(src, flavor, ScanOptions()).scan().accents
+            .filter { it.isOpening }
+            .sortedBy { it.offset }
+    }
+
+    private fun labelsIn(src: String, flavor: Flavor): List<String> {
+        return openingsIn(src, flavor).map { it.keyword }
+    }
+
+    @Test
+    fun `swift declares types with its own words`() {
+        val src = "protocol P {\n}\nextension String {\n}\nactor A {\n}\nstruct S {\n}\nenum E {\n}\n"
+        assertEquals(
+            listOf("protocol", "extension", "actor", "struct", "enum"),
+            labelsIn(src, Flavor.SWIFT),
+        )
+    }
+
+    @Test
+    fun `swift func is a function and keeps its name past the return arrow`() {
+        val src = "func fetch(from url: URL) async throws -> Data {\n}\n"
+        val function = openingsIn(src, Flavor.SWIFT).single()
+        assertEquals("fun", function.keyword)
+        assertEquals("fetch", accentName(src, function))
+    }
+
+    @Test
+    fun `swift init and deinit read as a constructor and a destructor`() {
+        val src = "class C {\n    init(name: String) {\n    }\n    deinit {\n    }\n}\n"
+        assertEquals(listOf("class", "ctor", "dtor"), labelsIn(src, Flavor.SWIFT))
+    }
+
+    @Test
+    fun `final class is a class, and class func is a method`() {
+        // `class` is both a type keyword and a modifier in Swift; only one of these has another
+        // declaring word behind it.
+        assertEquals(listOf("class"), labelsIn("final class Client {\n}\n", Flavor.SWIFT))
+        assertEquals(listOf("fun"), labelsIn("class func reset() {\n}\n", Flavor.SWIFT))
+    }
+
+    @Test
+    fun `a swift computed property carries its accessors`() {
+        val src = "class C {\n    var name: String {\n        get {\n        }\n" +
+            "        didSet {\n        }\n    }\n}\n"
+        assertEquals(listOf("class", "prop", "get", "didSet"), labelsIn(src, Flavor.SWIFT))
+    }
+
+    @Test
+    fun `a swift attribute does not hide the declaration behind it`() {
+        assertEquals(listOf("fun"), labelsIn("@MainActor func load() {\n}\n", Flavor.SWIFT))
+        assertEquals(
+            listOf("fun"),
+            labelsIn("@available(iOS 15, *) func load() {\n}\n", Flavor.SWIFT),
+        )
+    }
+
+    @Test
+    fun `a swift trailing closure borrows the name of the call it is passed to`() {
+        val src = "func load() {\n    DispatchQueue.main.async {\n    }\n}\n"
+        val closure = openingsIn(src, Flavor.SWIFT).single { it.isLambda }
+        assertEquals("async", accentName(src, closure))
+    }
+
+    @Test
+    fun `swift statements are not declarations`() {
+        val src = "func load() {\n    guard let x = y else {\n    }\n    switch x {\n    }\n" +
+            "    for a in b {\n    }\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.SWIFT))
+    }
+
+    @Test
+    fun `an objective-c method header is a function`() {
+        val src = "- (NSString *)nameFor:(NSInteger)index andFlag:(BOOL)flag\n{\n}\n"
+        val method = openingsIn(src, Flavor.C_FAMILY).single()
+        assertEquals("fun", method.keyword)
+        assertEquals("nameFor", accentName(src, method))
+    }
+
+    @Test
+    fun `an objective-c class method is a function too`() {
+        val src = "+ (instancetype)shared\n{\n}\n"
+        assertEquals("shared", accentName(src, openingsIn(src, Flavor.C_FAMILY).single()))
+    }
+
+    @Test
+    fun `an objective-c block literal borrows the argument it is passed as`() {
+        val src = "- (void)go\n{\n    [UIView animateWithDuration:0.3 animations:^{\n    }];\n}\n"
+        val block = openingsIn(src, Flavor.C_FAMILY).single { it.isLambda }
+        assertEquals("animations", accentName(src, block))
+    }
+
+    @Test
+    fun `an objective-c block literal with parameters is still a block`() {
+        val src = "- (void)go\n{\n    [self run:^(BOOL finished) {\n    }];\n}\n"
+        val block = openingsIn(src, Flavor.C_FAMILY).single { it.isLambda }
+        assertEquals("run", accentName(src, block))
+    }
+
+    @Test
+    fun `a minus sign in c++ does not make a method`() {
+        val src = "void f()\n{\n    int y = a - (b);\n    if (y)\n    {\n    }\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.C_FAMILY))
+    }
+
+    @Test
+    fun `rust declares with fn, impl, trait and mod`() {
+        val src = "mod net {\n    struct C {\n    }\n    trait T {\n    }\n" +
+            "    impl C {\n        fn go() {\n        }\n    }\n}\n"
+        assertEquals(listOf("mod", "struct", "trait", "impl", "fun"), labelsIn(src, Flavor.RUST))
+    }
+
+    @Test
+    fun `rust impl for names the type it is implemented on`() {
+        val src = "impl<'a> Display for Client<'a> {\n}\n"
+        val block = openingsIn(src, Flavor.RUST).single()
+        assertEquals("impl", block.keyword)
+        assertEquals("Client", accentName(src, block))
+    }
+
+    @Test
+    fun `unsafe qualifies a rust function but opens a block on its own`() {
+        assertEquals(listOf("fun"), labelsIn("unsafe fn danger() {\n}\n", Flavor.RUST))
+        assertEquals(emptyList<String>(), labelsIn("unsafe {\n}\n", Flavor.RUST))
+    }
+
+
+    // --- Swift and Objective-C, the smaller shapes ------------------------------------------
+
+    @Test
+    fun `swift generics do not hide the name behind them`() {
+        assertEquals("Page", accentName("struct Page<Item: Hashable> {\n}\n",
+            openingsIn("struct Page<Item: Hashable> {\n}\n", Flavor.SWIFT).single()))
+        val src = "func map<T>(_ f: (Int) -> T) -> [T] {\n}\n"
+        assertEquals("map", accentName(src, openingsIn(src, Flavor.SWIFT).single()))
+    }
+
+    @Test
+    fun `a swift where clause does not become the name`() {
+        val src = "extension Array where Element: Equatable {\n}\n"
+        val block = openingsIn(src, Flavor.SWIFT).single()
+        assertEquals("extension", block.keyword)
+        assertEquals("Array", accentName(src, block))
+    }
+
+    @Test
+    fun `a conformance list does not become the name`() {
+        val src = "protocol P: AnyObject {\n}\n"
+        assertEquals("P", accentName(src, openingsIn(src, Flavor.SWIFT).single()))
+    }
+
+    @Test
+    fun `a failable initialiser is still a constructor`() {
+        assertEquals(listOf("ctor"), labelsIn("init?(rawValue: String) {\n}\n", Flavor.SWIFT))
+    }
+
+    @Test
+    fun `swift modifier stacks all lead to the same function`() {
+        for (header in listOf(
+            "private static func make()",
+            "mutating func make()",
+            "@objc dynamic func make()",
+            "nonisolated public func make()",
+        )) {
+            val src = header + " {\n}\n"
+            assertEquals(header, "fun", labelsIn(src, Flavor.SWIFT).single())
+            assertEquals(header, "make", accentName(src, openingsIn(src, Flavor.SWIFT).single()))
+        }
+    }
+
+    @Test
+    fun `willSet is an accessor like didSet`() {
+        val src = "var x: Int {\n    willSet {\n    }\n}\n"
+        assertEquals(listOf("prop", "willSet"), labelsIn(src, Flavor.SWIFT))
+    }
+
+    @Test
+    fun `a closure assigned to a property takes the property's name`() {
+        // Not the last identifier in the header, which here is the return type.
+        val src = "let handler: () -> Void = {\n}\n"
+        val closure = openingsIn(src, Flavor.SWIFT).single()
+        assertTrue("expected a lambda", closure.isLambda)
+        assertEquals("handler", accentName(src, closure))
+    }
+
+    @Test
+    fun `swift control flow inside a function declares nothing`() {
+        for (body in listOf(
+            "do {\n} catch {\n}",
+            "if #available(iOS 15, *) {\n}",
+            "repeat {\n} while x",
+            "while x {\n}",
+        )) {
+            val src = "func f() {\n" + body + "\n}\n"
+            assertEquals(body, listOf("fun"), labelsIn(src, Flavor.SWIFT))
+        }
+    }
+
+    @Test
+    fun `swift string interpolation does not disturb the blocks around it`() {
+        val src = "let s = \"v: \\(x)\"\nfunc f() {\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.SWIFT))
+    }
+
+    @Test
+    fun `an objective-c method keeps its name past a generic return type`() {
+        val src = "- (NSDictionary<NSString *, NSNumber *> *)map\n{\n}\n"
+        assertEquals("map", accentName(src, openingsIn(src, Flavor.C_FAMILY).single()))
+    }
+
+    @Test
+    fun `a nullability annotation does not hide the selector`() {
+        val src = "- (instancetype _Nullable)initWith:(id)x\n{\n}\n"
+        assertEquals("initWith", accentName(src, openingsIn(src, Flavor.C_FAMILY).single()))
+    }
+
+    @Test
+    fun `an objective-c method written K and R is still a method`() {
+        assertEquals(listOf("fun"), labelsIn("- (void)go {\n}\n", Flavor.C_FAMILY))
+    }
+
+    @Test
+    fun `a caret that is exclusive or does not open a block literal`() {
+        // `^` is xor in C and C++, and those files share this dialect.
+        val src = "void f()\n{\n    if (a ^ b)\n    {\n    }\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.C_FAMILY))
+    }
+
+    @Test
+    fun `a c++ lambda is not read as an objective-c method`() {
+        val src = "void f()\n{\n    auto g = [=] (int x) -> int {\n        return x;\n    };\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.C_FAMILY))
+    }
+
+    @Test
+    fun `a block-typed property declares nothing`() {
+        val src = "@interface A\n@property (copy) void (^handler)(void);\n@end\nvoid f()\n{\n}\n"
+        assertEquals(listOf("fun"), labelsIn(src, Flavor.C_FAMILY))
+    }
+
+    @Test
+    fun `objective-c control flow inside a method declares nothing`() {
+        for (body in listOf(
+            "for (id item in items)\n    {\n    }",
+            "switch (x)\n    {\n    case 1:\n        {\n        }\n    }",
+            "@autoreleasepool\n    {\n    }",
+        )) {
+            val src = "- (void)go\n{\n    " + body + "\n}\n"
+            assertEquals(body, listOf("fun"), labelsIn(src, Flavor.C_FAMILY))
+        }
     }
 
     private companion object {

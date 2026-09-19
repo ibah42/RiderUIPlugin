@@ -172,20 +172,50 @@ private static void HandleNativeResult(
 
 ## Languages
 
-The dialect affects **only** the parsing of string literals and comments — blocks themselves are
-the same everywhere. So there are just a handful of special rules:
+A dialect settles two things: how string literals are parsed, and -- for the languages that
+need it -- how a declaration is recognised.
 
-| Dialect | Extensions | What it handles |
+| Dialect | Extensions | Literals |
 |---|---|---|
 | `CSHARP` | `cs csx` | `@"verbatim"`, `"""raw"""`, `$"{interp}"` with nested quotes |
-| `CPP` | `c cpp h hpp m mm metal hlsl glsl shader compute cginc usf` | `R"delim(raw)delim"`, `1'000'000` |
-| `JVM` | `java kt kts scala groovy gradle swift dart` | `"""` text blocks |
+| `C_FAMILY` | `c cpp h hpp m mm metal hlsl glsl shader compute cginc usf` | `R"delim(raw)delim"`, `1'000'000` |
+| `JVM` | `java kt kts scala groovy gradle dart` | `"""` text blocks |
+| `SWIFT` | `swift` | `"""` multi-line, `#"raw"#`, and no character literal at all |
+| `RUST` | `rs` | `r#"raw"#`, `b"bytes"`, and lifetimes (`&'a str`) |
 | `WEB` | `js jsx ts tsx go php` | `` `templates ${...}` `` |
-| `GENERIC` | everything else (`rs json css scss sql proto zig`…) | `"..."`, `'...'`, `/* */`, `//` |
+| `GENERIC` | everything else (`json css scss sql proto zig`…) | `"..."`, `'...'`, `/* */`, `//` |
 
-The `JVM` dialect is not decoration: Java, Kotlin, Scala and Swift all have `"""` blocks, and
-without parsing them the scanner runs off inside a multi-line string. A test catches this
-explicitly — the same Java file with a text block yields 1 hit under `JVM` and 2 under `GENERIC`.
+None of this is decoration. Java, Kotlin and Swift all have `"""` blocks, and without parsing
+them the scanner runs off inside a multi-line string -- the same Java file yields 1 hit under
+`JVM` and 2 under `GENERIC`. Rust's lifetime is worse than a wrong colour: read as a character
+literal, `&'a str` swallows the rest of the declaration, and `impl` and `fn` blocks disappear
+from the file entirely.
+
+### How declarations are recognised
+
+Most of these languages write the return type first and leave the kind of the thing implied by
+the shape: `void Foo(int x)`. Swift and Rust lead with the kind instead -- `func`, `struct`,
+`impl`, `mod` -- which is a different grammar rather than a dialect of the same one, so they are
+classified by their own rules.
+
+| Language | Types | Functions | Other |
+|---|---|---|---|
+| Swift | `class struct enum protocol extension actor` | `func`, `init` → `ctor`, `deinit` → `dtor`, `subscript` → `prop` | `var`/`let` bodies → `prop`; `get set willSet didSet`; trailing closures |
+| Rust | `struct enum union trait impl` | `fn` | `mod` → a namespace; `impl Display for Point` is named after `Point` |
+
+The label is the concept rather than the source word, so Swift's `init` prints `ctor` exactly as
+a C# constructor does: a reader who knows the plugin reads the same label in every language.
+
+`C_FAMILY` covers C, C++, Objective-C, Objective-C++ and the shading languages in one dialect,
+and that is deliberate rather than a shortcut: a `.h` is C, C++ or Objective-C with nothing in
+its name to say which, and a `.mm` is genuinely both at once. Their literals are identical --
+Objective-C's `@"..."` is an `@` in front of an ordinary C string -- so only the declaration
+shapes differ, and those are told apart by their own syntax instead of by the file's name.
+
+Objective-C therefore adds the two shapes C++ has none of: the `- (void)doThing:(int)x` method
+header, and the `^{ }` block literal, which borrows the name of the argument it is passed as --
+`animations:^{` reads as `animations`. Neither is valid C or C++, so the C and C++ files sharing
+the dialect are unaffected.
 
 The extension list is edited in Settings → Editor → Allman View. The same page has an "All text
 files" checkbox, which ignores the list and runs the plugin everywhere.

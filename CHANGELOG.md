@@ -2,6 +2,53 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.12.0
+
+- Swift and Objective-C are now properly supported, and Rust along with them.
+- Fixed: in a Rust file, `impl` and `fn` blocks disappeared outright. `.rs` fell back to the
+  generic dialect, where an apostrophe opens a character literal -- so in `fn longest<'a>(x: &'a
+  str)` the lifetime swallowed the rest of the declaration and the braces with it. Rust is now a
+  dialect of its own: a lifetime opens nothing, while `'x'` and `'\n'` still do, told apart by
+  where the closing apostrophe falls rather than by what is between them.
+- Swift is a dialect of its own too, instead of borrowing the JVM one: `#"raw"#` strings on top
+  of the `"""` multi-line ones it already had, and no character literal at all, since an
+  apostrophe is not a Swift token and a stray one must not swallow the line behind it.
+- Swift and Rust declarations are recognised by their own rules. Both lead with the kind of the
+  thing -- `func`, `struct`, `impl`, `mod` -- where the C family leads with the return type, so
+  they get their own classifier rather than more special cases inside the one built for C#.
+  Before this, `protocol`, `trait` and `mod` were all labelled `prop`, and `func`, `extension`
+  and `deinit` were not found at all.
+- The label stays the concept rather than the source word: Swift's `init` prints `ctor` and
+  `deinit` prints `dtor`, exactly as a C# constructor and destructor do.
+- Swift's `class` is handled where it is ambiguous: a modifier in `class func reset()`, the
+  declaration itself in `final class Client`. Only the first has another declaring word behind
+  it, which is what tells them apart. Attributes, including `@available(iOS 15, *)`, are stepped
+  over with the modifiers.
+- Objective-C keeps the C++ dialect, whose literals were already right for it, and gains the two
+  shapes C++ has none of: the `- (void)doThing:(int)x` method header and the `^{ }` block
+  literal. A block has no name of its own, so it borrows the argument it is passed as --
+  `animations:^{` reads as `animations`, the same way a lambda borrows its call elsewhere.
+  Neither shape is valid C or C++, so the files sharing that dialect are untouched.
+- Fixed: a closure held in a property took its name from the last word of the header, which is
+  the return type. `let handler: () -> Void = { ... }` read as `Void`; it now reads as
+  `handler`, the way a lambda assigned to a C# field already took the field's name.
+- `Flavor.CPP` is now `Flavor.C_FAMILY`. The dialect always covered C, C++, Objective-C,
+  Objective-C++ and the shading languages, and the old name said otherwise. One dialect for all
+  of them is deliberate rather than a shortcut: a `.h` is C, C++ or Objective-C with nothing in
+  its name to say which, and a `.mm` is genuinely both at once, while their literals are
+  identical -- so only the declaration shapes differ, and those are told apart by their own
+  syntax instead of by the file's name.
+- Five sample files joined the golden suite: Swift, Objective-C and Rust by hand, plus generated
+  long-form Swift and Objective-C from `tools/gen_longform_ios.py`, built the same way the C#
+  one is. Every block in those two is an exact size straddling one of the plugin's thresholds --
+  48 and 50 lines against the 50-line label, 98 and 156 against the 100-line span, 29/31, 59/61,
+  38/40 -- and the filler never opens a brace, so the sizes are exactly what the generator says.
+  The generator records what it meant to produce and the golden records what the scanner saw:
+  two independent accounts of the same file, which agreed on all 33 computed blocks.
+- Tests grew to 319, and the new ones were checked by mutation rather than by passing: breaking
+  the `class`-as-modifier rule and the block-literal caret test fails twelve of them, the golden
+  files included.
+
 ## 1.11.0
 
 - Fixed: a base-type list broken over more than one line made the class vanish -- no colour, no

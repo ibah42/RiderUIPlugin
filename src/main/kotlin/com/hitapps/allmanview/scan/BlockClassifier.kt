@@ -51,7 +51,28 @@ internal class OpenBlock(
  * looked up in scanner state -- where the header starts, whether the brace is the first code on
  * its line -- is settled before this is called, in BraceScanner.classifyBlock.
  */
-internal class BlockClassifier(private val options: ScanOptions) {
+internal class BlockClassifier(
+    private val options: ScanOptions,
+    flavor: Flavor = Flavor.GENERIC,
+) {
+
+    /**
+     * Set for the languages that lead with the kind of the declaration; null for the C family,
+     * whose shape-led grammar everything else in this file is about. See [KeywordLedClassifier].
+     */
+    /**
+     * Objective-C rides on the C++ dialect, whose literals are already right for it, and only
+     * needs its two shapes that C++ has none of: the `- (void)doThing:(int)x` method header and
+     * the `^{ }` block literal. Neither is valid C or C++, so recognising them in that dialect
+     * costs the C and C++ files sharing it nothing.
+     */
+    private val supportsObjectiveCShapes = flavor == Flavor.C_FAMILY
+
+    private val keywordLed: KeywordLedClassifier? = when (flavor) {
+        Flavor.SWIFT -> KeywordLedClassifier(KeywordLedClassifier.SWIFT)
+        Flavor.RUST -> KeywordLedClassifier(KeywordLedClassifier.RUST)
+        else -> null
+    }
 
 
     /**
@@ -74,6 +95,14 @@ internal class BlockClassifier(private val options: ScanOptions) {
     private fun classifyHeader(rawHeader: String, headerStart: Int, lineNumber: Int): OpenBlock {
         val header = HeaderReader.declarationPart(rawHeader)
 
+        if (keywordLed != null) {
+            val block = keywordLed.classify(header, headerStart, lineNumber)
+            if (block == null || !wantsKind(block)) {
+                return otherBlock(lineNumber)
+            }
+            return block
+        }
+
         if (options.accentNamespaces) {
             val namespaceBlock = classifyNamespaceHeader(header, headerStart, lineNumber)
             if (namespaceBlock != null) {
@@ -91,7 +120,8 @@ internal class BlockClassifier(private val options: ScanOptions) {
             // so a string literal that legitimately belongs to the declaration -- a default
             // parameter value such as `string reason = ""` -- must survive intact here.
             val functionHeader = HeaderReader.declarationPartKeepingLiterals(rawHeader)
-            val functionBlock = classifyFunctionHeader(functionHeader, headerStart, lineNumber)
+            val functionBlock = classifyObjectiveCHeader(functionHeader, headerStart, lineNumber)
+                ?: classifyFunctionHeader(functionHeader, headerStart, lineNumber)
             if (wantsFunctionKind(functionBlock)) {
                 return functionBlock
             }
@@ -108,6 +138,25 @@ internal class BlockClassifier(private val options: ScanOptions) {
      * labelling it -- it stops seeing it: no colour, no shadow, and no place in the nesting or
      * sibling bookkeeping either.
      */
+    /**
+     * The kind switches, asked of a finished block whatever classified it. The C-family path
+     * below only ever needs the function half, since it consults [ScanOptions.accentTypes] and
+     * friends before it starts; the keyword-led path produces every kind in one call and so
+     * needs all of them here.
+     */
+    private fun wantsKind(block: OpenBlock): Boolean {
+        if (block.kind == BlockKind.TYPE) {
+            return options.accentTypes
+        }
+        if (block.kind == BlockKind.NAMESPACE) {
+            return options.accentNamespaces
+        }
+        if (block.kind == BlockKind.FUNCTION && !options.accentFunctions) {
+            return false
+        }
+        return wantsFunctionKind(block)
+    }
+
     private fun wantsFunctionKind(block: OpenBlock): Boolean {
         if (block.kind != BlockKind.FUNCTION) {
             return true
@@ -338,6 +387,91 @@ internal class BlockClassifier(private val options: ScanOptions) {
             nameStart,
             nameEnd - nameStart,
             lineNumber,
+        )
+    }
+
+    /**
+     * Objective-C's own two shapes, or null when the header is neither.
+     *
+     *  - `- (void)doThing:(int)x` and `+ (instancetype)shared`: the sign and the parenthesised
+     *    return type come first, and the name is the first piece of the selector after them.
+     *  - `^{` and `^(NSInteger index) {`: a block literal, which has no name of its own and so
+     *    borrows the argument it is being passed as, exactly as a lambda does elsewhere --
+     *    `animateWithDuration:0.3 animations:^{` reads as `animations`.
+     */
+    private fun classifyObjectiveCHeader(
+        header: String,
+        headerStart: Int,
+        lineNumber: Int,
+    ): OpenBlock? {
+        if (!supportsObjectiveCShapes) {
+            return null
+        }
+        val blockLiteral = classifyObjectiveCBlockLiteral(header, headerStart, lineNumber)
+        if (blockLiteral != null) {
+            return blockLiteral
+        }
+
+        val signIndex = HeaderReader.skipSpacesIn(header, 0)
+        if (signIndex >= header.length) {
+            return null
+        }
+        val sign = header[signIndex]
+        if (sign != '-' && sign != '+') {
+            return null
+        }
+        val typeIndex = HeaderReader.skipSpacesIn(header, signIndex + 1)
+        if (typeIndex >= header.length || header[typeIndex] != '(') {
+            return null
+        }
+        val afterType = HeaderReader.skipBalancedParens(header, typeIndex)
+        val nameIndex = HeaderReader.identifierStartAt(header, HeaderReader.skipSpacesIn(header, afterType))
+        if (nameIndex < 0) {
+            return null
+        }
+        return namedBlock(
+            BlockKind.FUNCTION,
+            FUNCTION_KEYWORD,
+            header,
+            headerStart,
+            nameIndex,
+            lineNumber,
+        )
+    }
+
+    /** The `^` of a block literal, and the last identifier before it to name the block after. */
+    private fun classifyObjectiveCBlockLiteral(
+        header: String,
+        headerStart: Int,
+        lineNumber: Int,
+    ): OpenBlock? {
+        val trimmed = header.trimEnd()
+        if (trimmed.isEmpty()) {
+            return null
+        }
+
+        var caretIndex = trimmed.length - 1
+        if (trimmed[caretIndex] == ')') {
+            // `^(NSInteger index)`: rewind over the parameter list to the caret in front of it.
+            val open = HeaderReader.lastUnclosedParen(trimmed.substring(0, caretIndex))
+            if (open < 0) {
+                return null
+            }
+            caretIndex = open - 1
+        }
+        if (caretIndex < 0 || trimmed[caretIndex] != '^') {
+            return null
+        }
+
+        val nameIndex = HeaderReader.lastIdentifierStartBefore(trimmed, caretIndex)
+        return namedBlock(
+            BlockKind.FUNCTION,
+            FUNCTION_KEYWORD,
+            trimmed,
+            headerStart,
+            nameIndex,
+            lineNumber,
+            isLambda = true,
         )
     }
 
@@ -669,7 +803,9 @@ internal class BlockClassifier(private val options: ScanOptions) {
         val NAMESPACE_KEYWORDS = setOf("namespace")
 
         /** A property accessor's own bare keyword; there is one block kind per word. */
-        val ACCESSOR_KEYWORDS = setOf("get", "set", "init")
+        // `willSet` and `didSet` are Swift's; they can only ever reach here from the
+        // keyword-led classifier, so listing them costs the C# path nothing.
+        val ACCESSOR_KEYWORDS = setOf("get", "set", "init", "willSet", "didSet")
 
         /** Everything the "constructors" switch covers: they are one concept to a reader. */
         val CONSTRUCTOR_KEYWORDS = setOf(

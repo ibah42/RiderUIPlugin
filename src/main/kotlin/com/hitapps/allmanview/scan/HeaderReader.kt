@@ -155,6 +155,45 @@ internal object HeaderReader {
         return identifierAt(header, cursor) in WHERE_KEYWORDS
     }
 
+    /**
+     * Start of the last identifier ending before [endExclusive], stepping back over whatever
+     * separates them -- a colon, a dot, a bracket, spaces.
+     *
+     * [identifierStartBefore] needs an identifier character right at the boundary; this is for
+     * the callers that only know the identifier is somewhere to the left. `animations:^` and
+     * `.main.async ` both answer with the word a reader would name the block after.
+     */
+    fun lastIdentifierStartBefore(header: String, endExclusive: Int): Int {
+        var cursor = minOf(endExclusive, header.length)
+        while (cursor > 0 && !isIdentifierChar(header[cursor - 1])) {
+            cursor--
+        }
+        if (cursor <= 0) {
+            return -1
+        }
+        return identifierStartBefore(header, cursor)
+    }
+
+    /** Index just past the `)` that closes the group opening at [from]; the end if unbalanced. */
+    fun skipBalancedParens(header: String, from: Int): Int {
+        var depth = 0
+        var cursor = from
+
+        while (cursor < header.length) {
+            if (header[cursor] == '(') {
+                depth++
+            }
+            if (header[cursor] == ')') {
+                depth--
+                if (depth == 0) {
+                    return cursor + 1
+                }
+            }
+            cursor++
+        }
+        return header.length
+    }
+
     /** In `Foo<T>(` the name precedes the generic parameters, so `<...>` is rewound. */
     fun skipGenericsBefore(header: String, parenIndex: Int): Int {
         var cursor = parenIndex - 1
