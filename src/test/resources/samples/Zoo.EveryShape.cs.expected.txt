@@ -1,0 +1,138 @@
+counts: types=35 namespaces=5
+blocks: 135
+
+decl=32 open=33 close=34 span=2 FUNCTION 'fun' name='Work'
+decl=30 open=31 close=35 span=5 TYPE 'class' name='InsideInner'
+decl=27 open=28 close=36 span=9 NAMESPACE 'ns' name='' nested ordinal=1
+decl=42 open=43 close=44 span=2 FUNCTION 'fun' name='Work'
+decl=40 open=41 close=45 span=5 TYPE 'class' name='InsideSibling'
+decl=38 open=39 close=46 span=8 NAMESPACE 'ns' name='' nested ordinal=2
+decl=52 open=52 close=52 span=0 FUNCTION 'prop' name='Sides'
+decl=55 open=56 close=58 span=3 FUNCTION 'fun' name='Describe'
+decl=50 open=51 close=59 span=9 TYPE 'interface' name='IShape' ordinal=3
+decl=61 open=62 close=66 span=5 TYPE 'enum' name='Corner' ordinal=4
+decl=68 open=69 close=72 span=4 TYPE 'struct' name='Point2' ordinal=5
+decl=74 open=75 close=77 span=3 TYPE 'struct' name='Immutable' ordinal=6
+decl=86 open=87 close=89 span=3 FUNCTION 'get' name='' nested accessor
+decl=84 open=85 close=90 span=6 FUNCTION 'prop' name='Full'
+decl=82 open=83 close=91 span=9 TYPE 'record' name='Named' ordinal=7
+decl=95 open=96 close=97 span=2 FUNCTION 'fun' name='Touch'
+decl=93 open=94 close=98 span=5 TYPE 'record' name='Handle' ordinal=8
+decl=102 open=103 close=105 span=3 FUNCTION 'fun' name='Sum'
+decl=100 open=101 close=106 span=6 TYPE 'record' name='Coord' ordinal=9
+decl=110 open=111 close=113 span=3 FUNCTION 'fun' name='Bump'
+decl=108 open=109 close=114 span=6 TYPE 'record' name='Mutable' ordinal=10
+decl=118 open=119 close=121 span=3 FUNCTION 'fun' name='Twice'
+decl=116 open=117 close=122 span=6 TYPE 'class' name='Helpers' ordinal=11
+decl=128 open=129 close=130 span=2 FUNCTION 'fun' name='May'
+decl=124 open=125 close=131 span=7 TYPE 'class' name='Abstract' ordinal=12
+decl=135 open=136 close=137 span=2 FUNCTION 'fun' name='First'
+decl=133 open=134 close=138 span=5 TYPE 'class' name='Split' ordinal=13
+decl=142 open=143 close=144 span=2 FUNCTION 'fun' name='Second'
+decl=140 open=141 close=145 span=5 TYPE 'class' name='Split' ordinal=14
+decl=151 open=152 close=153 span=2 FUNCTION 'fun' name='Must'
+decl=149 open=150 close=154 span=5 TYPE 'class' name='SingleBase' ordinal=15
+decl=159 open=160 close=161 span=2 FUNCTION 'fun' name='Must'
+decl=156 open=158 close=162 span=6 TYPE 'class' name='LeadingColon' ordinal=16
+decl=173 open=174 close=176 span=3 FUNCTION 'get' name='' nested accessor
+decl=171 open=172 close=177 span=6 FUNCTION 'prop' name='Sides'
+decl=179 open=180 close=181 span=2 FUNCTION 'fun' name='Must'
+decl=183 open=184 close=185 span=2 FUNCTION 'fun' name='Dispose'
+decl=166 open=170 close=186 span=20 TYPE 'class' name='WrappedList' ordinal=17
+decl=193 open=194 close=196 span=3 FUNCTION 'get' name='' nested accessor
+decl=191 open=192 close=197 span=6 FUNCTION 'prop' name='Sides'
+decl=199 open=200 close=201 span=2 FUNCTION 'fun' name='Must'
+decl=188 open=190 close=202 span=14 TYPE 'class' name='TrailingComma' ordinal=18
+decl=205 open=207 close=208 span=3 TYPE 'class' name='WrappedGeneric' ordinal=19
+decl=218 open=219 close=221 span=3 FUNCTION 'get' name='' nested accessor
+decl=216 open=217 close=222 span=6 FUNCTION 'prop' name='Sides'
+decl=224 open=225 close=226 span=2 FUNCTION 'fun' name='Must'
+decl=210 open=215 close=227 span=17 TYPE 'class' name='Constrained' ordinal=20
+decl=242 open=243 close=244 span=2 FUNCTION 'fun' name='Deeper' nested
+decl=240 open=241 close=247 span=7 FUNCTION 'fun' name='Helper' nested
+decl=237 open=238 close=250 span=13 FUNCTION 'fun' name='Deepest'
+decl=235 open=236 close=251 span=16 TYPE 'class' name='Level3' nested ordinal=1
+decl=253 open=254 close=255 span=2 TYPE 'class' name='AlsoLevel3' nested ordinal=2
+decl=233 open=234 close=256 span=23 TYPE 'class' name='Level2' nested ordinal=1
+decl=258 open=259 close=260 span=2 TYPE 'struct' name='AlsoLevel2' nested ordinal=2
+decl=231 open=232 close=261 span=30 TYPE 'class' name='Level1' ordinal=21
+decl=272 open=273 close=274 span=2 FUNCTION 'static ctor' name='MemberZoo'
+decl=276 open=278 close=279 span=3 FUNCTION 'ctor' name='MemberZoo'
+decl=281 open=282 close=284 span=3 FUNCTION 'ctor' name='MemberZoo'
+decl=286 open=287 close=288 span=2 FUNCTION 'dtor' name='MemberZoo'
+decl=291 open=291 close=291 span=0 FUNCTION 'prop' name='Sides'
+decl=293 open=293 close=293 span=0 FUNCTION 'prop' name='Name'
+decl=300 open=301 close=303 span=3 FUNCTION 'get' name='' nested accessor
+decl=304 open=305 close=307 span=3 FUNCTION 'set' name='' nested accessor
+decl=298 open=299 close=308 span=10 FUNCTION 'prop' name='Cached'
+decl=312 open=313 close=315 span=3 FUNCTION 'get' name='' nested accessor
+decl=310 open=311 close=316 span=6 FUNCTION 'prop' name='Shared'
+decl=321 open=322 close=324 span=3 FUNCTION 'get' name='' nested accessor
+decl=325 open=326 close=328 span=3 FUNCTION 'set' name='' nested accessor
+decl=319 open=320 close=329 span=10 FUNCTION 'prop' name='this'
+decl=331 open=332 close=333 span=2 FUNCTION 'fun' name='Dispose'
+decl=337 open=338 close=340 span=3 FUNCTION 'op' name='+'
+decl=342 open=343 close=345 span=3 FUNCTION 'op' name='-'
+decl=347 open=348 close=350 span=3 FUNCTION 'op' name='=='
+decl=352 open=353 close=355 span=3 FUNCTION 'op' name='!='
+decl=357 open=358 close=360 span=3 FUNCTION 'op' name='true'
+decl=362 open=363 close=365 span=3 FUNCTION 'op' name='false'
+decl=367 open=368 close=370 span=3 FUNCTION 'op' name='int'
+decl=372 open=373 close=375 span=3 FUNCTION 'op' name='MemberZoo'
+decl=378 open=379 close=381 span=3 FUNCTION 'op' name='System.Collections.Generic.List<int>'
+decl=383 open=384 close=386 span=3 FUNCTION 'fun' name='Equals'
+decl=388 open=389 close=391 span=3 FUNCTION 'fun' name='GetHashCode'
+decl=265 open=266 close=392 span=127 TYPE 'class' name='MemberZoo' ordinal=22
+decl=398 open=399 close=400 span=2 FUNCTION 'fun' name='Plain'
+decl=402 open=403 close=404 span=2 FUNCTION 'fun' name='Static'
+decl=406 open=407 close=410 span=4 FUNCTION 'fun' name='AsyncWork'
+decl=412 open=418 close=419 span=7 FUNCTION 'fun' name='Defaults'
+decl=422 open=423 close=425 span=3 FUNCTION 'fun' name='Tuple'
+decl=427 open=428 close=430 span=3 FUNCTION 'fun' name='NullableTuple'
+decl=432 open=433 close=435 span=3 FUNCTION 'fun' name='Ref'
+decl=437 open=438 close=439 span=2 FUNCTION 'fun' name='Params'
+decl=441 open=443 close=444 span=3 FUNCTION 'fun' name='Generic'
+decl=447 open=448 close=449 span=2 FUNCTION 'fun' name='Contextual'
+decl=452 open=453 close=454 span=2 FUNCTION 'fun' name='Release'
+decl=461 open=462 close=464 span=3 FUNCTION 'fun' name='Adder' nested
+decl=459 open=460 close=467 span=8 FUNCTION 'fun' name='Locals'
+decl=396 open=397 close=468 span=72 TYPE 'class' name='FunctionZoo' ordinal=23
+decl=470 open=471 close=473 span=3 TYPE 'interface' name='IDisposableLike' ordinal=24
+decl=480 open=481 close=483 span=3 FUNCTION 'fun' name='Producer' lambda
+decl=485 open=486 close=487 span=2 FUNCTION 'fun' name='Action' lambda
+decl=492 open=493 close=495 span=3 FUNCTION 'fun' name='Select' nested lambda
+decl=500 open=501 close=503 span=3 FUNCTION 'fun' name='Where' nested lambda
+decl=498 open=499 close=504 span=6 FUNCTION 'fun' name='Select' nested lambda
+decl=516 open=517 close=518 span=2 FUNCTION 'fun' name='Register' nested lambda
+decl=518 open=519 close=520 span=2 FUNCTION 'fun' name='' nested lambda
+decl=489 open=490 close=521 span=32 FUNCTION 'fun' name='Passed'
+decl=523 open=524 close=525 span=2 FUNCTION 'fun' name='Register'
+decl=477 open=478 close=526 span=49 TYPE 'class' name='LambdaZoo' ordinal=25
+decl=532 open=533 close=615 span=83 FUNCTION 'fun' name='Everything'
+decl=617 open=618 close=659 span=42 FUNCTION 'fun' name='Initializers'
+decl=530 open=531 close=660 span=130 TYPE 'class' name='ControlFlow' ordinal=26
+decl=666 open=667 close=680 span=14 FUNCTION 'fun' name='Strings'
+decl=686 open=687 close=690 span=4 FUNCTION 'fun' name='Commented'
+decl=664 open=665 close=691 span=27 TYPE 'class' name='LiteralTraps' ordinal=27
+decl=23 open=24 close=692 span=669 NAMESPACE 'ns' name='' ordinal=1
+decl=704 open=704 close=706 span=2 FUNCTION 'ctor' name='Hanging'
+decl=708 open=708 close=732 span=24 FUNCTION 'fun' name='Work'
+decl=735 open=738 close=740 span=5 FUNCTION 'fun' name='Wrapped'
+decl=743 open=743 close=745 span=2 FUNCTION 'get' name='' nested accessor
+decl=746 open=746 close=748 span=2 FUNCTION 'set' name='' nested accessor
+decl=742 open=742 close=749 span=7 FUNCTION 'prop' name='Property'
+decl=751 open=751 close=753 span=2 FUNCTION 'op' name='+'
+decl=756 open=756 close=758 span=2 FUNCTION 'fun' name='Select' nested lambda
+decl=755 open=755 close=759 span=4 FUNCTION 'fun' name='Lambdas'
+decl=701 open=701 close=760 span=59 TYPE 'class' name='Hanging' ordinal=1
+decl=765 open=765 close=767 span=2 FUNCTION 'fun' name='Doubled'
+decl=762 open=762 close=768 span=6 TYPE 'struct' name='HangingStruct' ordinal=2
+decl=772 open=773 close=774 span=2 FUNCTION 'ctor' name='WithBaseCall'
+decl=771 open=771 close=775 span=4 TYPE 'class' name='WithBaseCall' ordinal=3
+decl=696 open=697 close=776 span=80 NAMESPACE 'ns' name='' ordinal=2
+decl=785 open=786 close=787 span=2 FUNCTION 'fun' name='EditorOnly'
+decl=789 open=790 close=791 span=2 FUNCTION 'fun' name='RuntimeOnly'
+decl=796 open=797 close=798 span=2 FUNCTION 'fun' name='InsideRegion'
+decl=804 open=805 close=806 span=2 FUNCTION 'fun' name='Attributed'
+decl=782 open=783 close=807 span=25 TYPE 'class' name='Preprocessed'
+decl=780 open=781 close=808 span=28 NAMESPACE 'ns' name='' ordinal=3

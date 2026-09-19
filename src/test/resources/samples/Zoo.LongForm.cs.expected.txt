@@ -1,0 +1,169 @@
+counts: types=51 namespaces=2
+blocks: 166
+
+decl=39 open=40 close=68 span=29 FUNCTION 'fun' name='JustUnderTheLabel'
+decl=70 open=71 close=100 span=30 FUNCTION 'fun' name='ExactlyAtTheLabel'
+decl=102 open=103 close=133 span=31 FUNCTION 'fun' name='JustOverTheLabel'
+decl=135 open=136 close=194 span=59 FUNCTION 'fun' name='JustUnderTheSpan'
+decl=196 open=197 close=256 span=60 FUNCTION 'fun' name='ExactlyAtTheSpan'
+decl=258 open=259 close=353 span=95 FUNCTION 'fun' name='WellOverTheSpan'
+decl=355 open=356 close=364 span=9 FUNCTION 'fun' name='Tiny'
+decl=35 open=36 close=365 span=330 TYPE 'class' name='FunctionThresholds' ordinal=1
+decl=375 open=376 close=395 span=20 FUNCTION 'fun' name='Step0'
+decl=397 open=398 close=416 span=19 FUNCTION 'fun' name='Step1'
+decl=371 open=372 close=420 span=49 TYPE 'class' name='TypeJustUnderTheLabel' ordinal=2
+decl=426 open=427 close=446 span=20 FUNCTION 'fun' name='Step0'
+decl=448 open=449 close=467 span=19 FUNCTION 'fun' name='Step1'
+decl=422 open=423 close=472 span=50 TYPE 'class' name='TypeExactlyAtTheLabel' ordinal=3
+decl=478 open=479 close=508 span=30 FUNCTION 'fun' name='Step0'
+decl=510 open=511 close=540 span=30 FUNCTION 'fun' name='Step1'
+decl=542 open=543 close=570 span=28 FUNCTION 'fun' name='Step2'
+decl=474 open=475 close=573 span=99 TYPE 'class' name='TypeJustUnderTheSpan' ordinal=4
+decl=579 open=580 close=609 span=30 FUNCTION 'fun' name='Step0'
+decl=611 open=612 close=641 span=30 FUNCTION 'fun' name='Step1'
+decl=643 open=644 close=671 span=28 FUNCTION 'fun' name='Step2'
+decl=575 open=576 close=675 span=100 TYPE 'class' name='TypeExactlyAtTheSpan' ordinal=5
+decl=687 open=688 close=696 span=9 FUNCTION 'fun' name='Work'
+decl=683 open=684 close=697 span=14 TYPE 'class' name='SiblingUnder' nested ordinal=1
+decl=703 open=704 close=713 span=10 FUNCTION 'fun' name='Work'
+decl=699 open=700 close=714 span=15 TYPE 'class' name='SiblingExact' nested ordinal=2
+decl=720 open=721 close=755 span=35 FUNCTION 'fun' name='Work'
+decl=716 open=717 close=756 span=40 TYPE 'class' name='SiblingOver' nested ordinal=3
+decl=681 open=682 close=759 span=78 TYPE 'class' name='SiblingHost' ordinal=6
+decl=771 open=772 close=783 span=12 FUNCTION 'get' name='' nested accessor
+decl=785 open=786 close=797 span=12 FUNCTION 'set' name='' nested accessor
+decl=769 open=770 close=798 span=29 FUNCTION 'prop' name='Small'
+decl=802 open=803 close=828 span=26 FUNCTION 'get' name='' nested accessor
+decl=830 open=831 close=854 span=24 FUNCTION 'set' name='' nested accessor
+decl=800 open=801 close=855 span=55 FUNCTION 'prop' name='Large'
+decl=857 open=857 close=857 span=0 FUNCTION 'prop' name='Auto'
+decl=765 open=766 close=858 span=93 TYPE 'class' name='PropertyZoo' ordinal=7
+decl=876 open=877 close=931 span=55 FUNCTION 'fun' name='Deepest'
+decl=872 open=873 close=932 span=60 TYPE 'class' name='Level3' nested
+decl=934 open=935 close=969 span=35 FUNCTION 'fun' name='AtLevel2'
+decl=868 open=869 close=970 span=102 TYPE 'class' name='Level2' nested
+decl=972 open=973 close=1007 span=35 FUNCTION 'fun' name='AtLevel1'
+decl=864 open=865 close=1008 span=144 TYPE 'class' name='Level1' ordinal=8
+decl=1019 open=1020 close=1050 span=31 FUNCTION 'static ctor' name='MemberZoo'
+decl=1052 open=1054 close=1086 span=34 FUNCTION 'ctor' name='MemberZoo'
+decl=1088 open=1089 close=1091 span=3 FUNCTION 'ctor' name='MemberZoo'
+decl=1093 open=1094 close=1126 span=33 FUNCTION 'dtor' name='MemberZoo'
+decl=1128 open=1129 close=1162 span=34 FUNCTION 'op' name='+'
+decl=1164 open=1165 close=1196 span=32 FUNCTION 'op' name='=='
+decl=1198 open=1199 close=1207 span=9 FUNCTION 'op' name='!='
+decl=1209 open=1210 close=1271 span=62 FUNCTION 'op' name='int'
+decl=1273 open=1274 close=1276 span=3 FUNCTION 'fun' name='Equals'
+decl=1278 open=1279 close=1281 span=3 FUNCTION 'fun' name='GetHashCode'
+decl=1014 open=1015 close=1282 span=268 TYPE 'class' name='MemberZoo' ordinal=9
+decl=1296 open=1297 close=1330 span=34 FUNCTION 'fun' name='Select' nested lambda
+decl=1292 open=1293 close=1333 span=41 FUNCTION 'fun' name='Passed'
+decl=1288 open=1289 close=1334 span=46 TYPE 'class' name='LambdaZoo' ordinal=10
+decl=1344 open=1345 close=1391 span=47 FUNCTION 'fun' name='Measure'
+decl=1340 open=1341 close=1392 span=52 TYPE 'record' name='LongRecord' ordinal=11
+decl=1398 open=1399 close=1437 span=39 FUNCTION 'fun' name='Measure'
+decl=1394 open=1395 close=1438 span=44 TYPE 'record' name='LongCoord' ordinal=12
+decl=1444 open=1445 close=1497 span=53 FUNCTION 'fun' name='Measure'
+decl=1440 open=1441 close=1498 span=58 TYPE 'struct' name='LongPoint' ordinal=13
+decl=1508 open=1509 close=1525 span=17 FUNCTION 'fun' name='Step0'
+decl=1527 open=1528 close=1548 span=21 FUNCTION 'fun' name='Step1'
+decl=1504 open=1505 close=1550 span=46 TYPE 'class' name='QuietType00' ordinal=14
+decl=1556 open=1557 close=1574 span=18 FUNCTION 'fun' name='Step0'
+decl=1576 open=1577 close=1598 span=22 FUNCTION 'fun' name='Step1'
+decl=1552 open=1553 close=1600 span=48 TYPE 'class' name='QuietType01' ordinal=15
+decl=1606 open=1607 close=1625 span=19 FUNCTION 'fun' name='Step0'
+decl=1627 open=1628 close=1650 span=23 FUNCTION 'fun' name='Step1'
+decl=1602 open=1603 close=1652 span=50 TYPE 'class' name='QuietType02' ordinal=16
+decl=1658 open=1659 close=1678 span=20 FUNCTION 'fun' name='Step0'
+decl=1680 open=1681 close=1704 span=24 FUNCTION 'fun' name='Step1'
+decl=1654 open=1655 close=1706 span=52 TYPE 'class' name='QuietType03' ordinal=17
+decl=1712 open=1713 close=1733 span=21 FUNCTION 'fun' name='Step0'
+decl=1735 open=1736 close=1756 span=21 FUNCTION 'fun' name='Step1'
+decl=1708 open=1709 close=1758 span=50 TYPE 'class' name='QuietType04' ordinal=18
+decl=1764 open=1765 close=1786 span=22 FUNCTION 'fun' name='Step0'
+decl=1788 open=1789 close=1810 span=22 FUNCTION 'fun' name='Step1'
+decl=1760 open=1761 close=1812 span=52 TYPE 'class' name='QuietType05' ordinal=19
+decl=1818 open=1819 close=1835 span=17 FUNCTION 'fun' name='Step0'
+decl=1837 open=1838 close=1860 span=23 FUNCTION 'fun' name='Step1'
+decl=1814 open=1815 close=1862 span=48 TYPE 'class' name='QuietType06' ordinal=20
+decl=1868 open=1869 close=1886 span=18 FUNCTION 'fun' name='Step0'
+decl=1888 open=1889 close=1912 span=24 FUNCTION 'fun' name='Step1'
+decl=1864 open=1865 close=1914 span=50 TYPE 'class' name='QuietType07' ordinal=21
+decl=1920 open=1921 close=1939 span=19 FUNCTION 'fun' name='Step0'
+decl=1941 open=1942 close=1962 span=21 FUNCTION 'fun' name='Step1'
+decl=1916 open=1917 close=1964 span=48 TYPE 'class' name='QuietType08' ordinal=22
+decl=1970 open=1971 close=1990 span=20 FUNCTION 'fun' name='Step0'
+decl=1992 open=1993 close=2014 span=22 FUNCTION 'fun' name='Step1'
+decl=1966 open=1967 close=2016 span=50 TYPE 'class' name='QuietType09' ordinal=23
+decl=2022 open=2023 close=2043 span=21 FUNCTION 'fun' name='Step0'
+decl=2045 open=2046 close=2068 span=23 FUNCTION 'fun' name='Step1'
+decl=2018 open=2019 close=2070 span=52 TYPE 'class' name='QuietType10' ordinal=24
+decl=2076 open=2077 close=2098 span=22 FUNCTION 'fun' name='Step0'
+decl=2100 open=2101 close=2124 span=24 FUNCTION 'fun' name='Step1'
+decl=2072 open=2073 close=2126 span=54 TYPE 'class' name='QuietType11' ordinal=25
+decl=2132 open=2133 close=2149 span=17 FUNCTION 'fun' name='Step0'
+decl=2151 open=2152 close=2172 span=21 FUNCTION 'fun' name='Step1'
+decl=2128 open=2129 close=2174 span=46 TYPE 'class' name='QuietType12' ordinal=26
+decl=2180 open=2181 close=2198 span=18 FUNCTION 'fun' name='Step0'
+decl=2200 open=2201 close=2222 span=22 FUNCTION 'fun' name='Step1'
+decl=2176 open=2177 close=2224 span=48 TYPE 'class' name='QuietType13' ordinal=27
+decl=2230 open=2231 close=2259 span=29 FUNCTION 'fun' name='Step0'
+decl=2226 open=2227 close=2274 span=48 TYPE 'class' name='HeavyQuietType00' ordinal=28
+decl=2280 open=2281 close=2309 span=29 FUNCTION 'fun' name='Step0'
+decl=2276 open=2277 close=2324 span=48 TYPE 'class' name='HeavyQuietType01' ordinal=29
+decl=2330 open=2331 close=2359 span=29 FUNCTION 'fun' name='Step0'
+decl=2326 open=2327 close=2374 span=48 TYPE 'class' name='HeavyQuietType02' ordinal=30
+decl=2380 open=2381 close=2409 span=29 FUNCTION 'fun' name='Step0'
+decl=2376 open=2377 close=2424 span=48 TYPE 'class' name='HeavyQuietType03' ordinal=31
+decl=2430 open=2431 close=2459 span=29 FUNCTION 'fun' name='Step0'
+decl=2426 open=2427 close=2474 span=48 TYPE 'class' name='HeavyQuietType04' ordinal=32
+decl=2480 open=2481 close=2509 span=29 FUNCTION 'fun' name='Step0'
+decl=2476 open=2477 close=2524 span=48 TYPE 'class' name='HeavyQuietType05' ordinal=33
+decl=2530 open=2531 close=2559 span=29 FUNCTION 'fun' name='Step0'
+decl=2526 open=2527 close=2574 span=48 TYPE 'class' name='HeavyQuietType06' ordinal=34
+decl=2580 open=2581 close=2609 span=29 FUNCTION 'fun' name='Step0'
+decl=2576 open=2577 close=2624 span=48 TYPE 'class' name='HeavyQuietType07' ordinal=35
+decl=2630 open=2631 close=2663 span=33 FUNCTION 'fun' name='Step0'
+decl=2665 open=2666 close=2684 span=19 FUNCTION 'fun' name='Step1'
+decl=2626 open=2627 close=2688 span=62 TYPE 'class' name='NamedType00' ordinal=36
+decl=2694 open=2695 close=2729 span=35 FUNCTION 'fun' name='Step0'
+decl=2731 open=2732 close=2751 span=20 FUNCTION 'fun' name='Step1'
+decl=2690 open=2691 close=2755 span=65 TYPE 'class' name='NamedType01' ordinal=37
+decl=2761 open=2762 close=2798 span=37 FUNCTION 'fun' name='Step0'
+decl=2800 open=2801 close=2821 span=21 FUNCTION 'fun' name='Step1'
+decl=2757 open=2758 close=2825 span=68 TYPE 'class' name='NamedType02' ordinal=38
+decl=2831 open=2832 close=2870 span=39 FUNCTION 'fun' name='Step0'
+decl=2872 open=2873 close=2891 span=19 FUNCTION 'fun' name='Step1'
+decl=2827 open=2828 close=2898 span=71 TYPE 'class' name='NamedType03' ordinal=39
+decl=2904 open=2905 close=2945 span=41 FUNCTION 'fun' name='Step0'
+decl=2947 open=2948 close=2967 span=20 FUNCTION 'fun' name='Step1'
+decl=2900 open=2901 close=2974 span=74 TYPE 'class' name='NamedType04' ordinal=40
+decl=2980 open=2981 close=3013 span=33 FUNCTION 'fun' name='Step0'
+decl=3015 open=3016 close=3036 span=21 FUNCTION 'fun' name='Step1'
+decl=2976 open=2977 close=3053 span=77 TYPE 'class' name='NamedType05' ordinal=41
+decl=3059 open=3060 close=3129 span=70 FUNCTION 'fun' name='Step0'
+decl=3131 open=3132 close=3195 span=64 FUNCTION 'fun' name='Step1'
+decl=3197 open=3198 close=3223 span=26 FUNCTION 'fun' name='Step2'
+decl=3055 open=3056 close=3225 span=170 TYPE 'class' name='SpanningType00' ordinal=42
+decl=3231 open=3232 close=3309 span=78 FUNCTION 'fun' name='Step0'
+decl=3311 open=3312 close=3381 span=70 FUNCTION 'fun' name='Step1'
+decl=3383 open=3384 close=3410 span=27 FUNCTION 'fun' name='Step2'
+decl=3227 open=3228 close=3412 span=185 TYPE 'class' name='SpanningType01' ordinal=43
+decl=3418 open=3419 close=3504 span=86 FUNCTION 'fun' name='Step0'
+decl=3506 open=3507 close=3582 span=76 FUNCTION 'fun' name='Step1'
+decl=3584 open=3585 close=3612 span=28 FUNCTION 'fun' name='Step2'
+decl=3414 open=3415 close=3624 span=210 TYPE 'class' name='SpanningType02' ordinal=44
+decl=3630 open=3631 close=3724 span=94 FUNCTION 'fun' name='Step0'
+decl=3726 open=3727 close=3808 span=82 FUNCTION 'fun' name='Step1'
+decl=3810 open=3811 close=3839 span=29 FUNCTION 'fun' name='Step2'
+decl=3626 open=3627 close=3866 span=240 TYPE 'class' name='SpanningType03' ordinal=45
+decl=29 open=30 close=3868 span=3839 NAMESPACE 'ns' name='' ordinal=1
+decl=3879 open=3879 close=3898 span=19 FUNCTION 'fun' name='Quiet'
+decl=3900 open=3900 close=3924 span=24 FUNCTION 'fun' name='Modest'
+decl=3926 open=3926 close=3960 span=34 FUNCTION 'fun' name='Named'
+decl=3962 open=3962 close=4003 span=41 FUNCTION 'fun' name='Longer'
+decl=4005 open=4005 close=4071 span=66 FUNCTION 'fun' name='Spanned'
+decl=4073 open=4073 close=4151 span=78 FUNCTION 'fun' name='Wider'
+decl=4153 open=4153 close=4249 span=96 FUNCTION 'fun' name='Widest'
+decl=4251 open=4251 close=4273 span=22 FUNCTION 'fun' name='Calm'
+decl=3876 open=3876 close=4275 span=399 TYPE 'class' name='Hanging'
+decl=3874 open=3875 close=4276 span=402 NAMESPACE 'ns' name='' ordinal=2

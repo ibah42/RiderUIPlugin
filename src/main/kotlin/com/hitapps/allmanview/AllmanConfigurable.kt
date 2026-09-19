@@ -95,29 +95,110 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                     blockSpanMarker = checkBox("Report how far back a very long block started")
                         .bindSelected(config::blockSpanMarkerEnabled)
                         .comment(
-                            "}  class Foo  {: 920  Δ: 143  --  the block's { is on line 920 " +
-                                "and its } is 143 lines below it, so the two numbers always add " +
-                                "up to the line you are looking at. Any kind of block qualifies: " +
-                                "type, function or namespace. This is the one marker with " +
-                                "nothing on the declaration line -- standing on line 920 you can " +
-                                "already see the block starts there; it is at the far end, after " +
-                                "a long scroll, that the question is worth answering. Drawn last, " +
-                                "after the block's name.",
+                            "}  class Foo  ↑: 920  Δ: 143  --  the block is declared " +
+                                "on line 920 and its } is 143 lines below it, so the two " +
+                                "numbers always add up to the line you are looking at. The " +
+                                "declaration's line, not the {'s: a wrapped signature puts " +
+                                "several lines between the two, and every length in this " +
+                                "panel is measured from the declaration. This is the one " +
+                                "marker with nothing on the declaration line -- standing on " +
+                                "line 920 you can already see the block starts there; it is " +
+                                "at the far end, after a long scroll, that the question is " +
+                                "worth answering. Drawn last, after the block's name.",
                         )
                 }
                 rowsRange {
-                    row("From this block length, lines:") {
-                        spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
-                            .bindIntValue(config::blockSpanMarkerMinLines)
+                    // Four lengths rather than one: "long" is not the same number for a
+                    // property as for a class, and a single threshold would be wrong for
+                    // three of the four whatever it was set to.
+                    row {
+                        label("Types").bold()
+                    }
+                    lateinit var spanTypes: Cell<JBCheckBox>
+                    row {
+                        spanTypes = checkBox("Report a type's span")
+                            .bindSelected(config::blockSpanTypes)
+                            .comment("class, struct, interface, enum, record.")
+                    }
+                    rowsRange {
+                        row("From this block length, lines:") {
+                            spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                .bindIntValue(config::blockSpanTypeMinLines)
+                        }
+                        row {
+                            checkBox("Only in a file that holds more than one type")
+                                .bindSelected(config::blockSpanTypesOnlyWithSeveralTypes)
+                                .comment(
+                                    "Counted over the whole file, nesting included. The span " +
+                                        "answers \"which of these, and how far back did it " +
+                                        "begin\", which is a question only where something " +
+                                        "could be confused with something else. One class in " +
+                                        "a file has no competition; fourteen of them, hundreds " +
+                                        "of lines each, is where the marker pays for itself.",
+                                )
+                        }
+                    }.enabledIf(spanTypes.selected)
+
+                    row {
+                        label("Functions").bold()
+                    }
+                    lateinit var spanFunctions: Cell<JBCheckBox>
+                    row {
+                        spanFunctions = checkBox("Report a function's span")
+                            .bindSelected(config::blockSpanFunctions)
+                            .comment("Methods, constructors, destructors and lambdas.")
+                    }
+                    rowsRange {
+                        row("From this block length, lines:") {
+                            spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                .bindIntValue(config::blockSpanFunctionMinLines)
+                        }
+                    }.enabledIf(spanFunctions.selected)
+
+                    row {
+                        label("Properties").bold()
+                    }
+                    lateinit var spanProperties: Cell<JBCheckBox>
+                    row {
+                        spanProperties = checkBox("Report a property's span")
+                            .bindSelected(config::blockSpanProperties)
                             .comment(
-                                "Deliberately well above the label lengths under \"Accent " +
-                                    "braces\": those answer \"what was this block called\", " +
-                                    "this one answers \"how much did I just scroll past\", " +
-                                    "which only becomes a real question much later. A block " +
-                                    "that reaches this length is named as well, so the span " +
-                                    "never stands alone with nothing to say what it spans.",
+                                "A property's own block and its get, set and init accessors. " +
+                                    "Separate from functions because a forty-line property is " +
+                                    "remarkable and a forty-line method is not.",
                             )
                     }
+                    rowsRange {
+                        row("From this block length, lines:") {
+                            spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                .bindIntValue(config::blockSpanPropertyMinLines)
+                        }
+                    }.enabledIf(spanProperties.selected)
+
+                    row {
+                        label("Namespaces").bold()
+                    }
+                    lateinit var spanNamespaces: Cell<JBCheckBox>
+                    row {
+                        spanNamespaces = checkBox("Report a namespace's span")
+                            .bindSelected(config::blockSpanNamespaces)
+                    }
+                    rowsRange {
+                        row("From this block length, lines:") {
+                            spinner(BLOCK_LINES_RANGE, BLOCK_LINES_STEP)
+                                .bindIntValue(config::blockSpanNamespaceMinLines)
+                        }
+                        row {
+                            checkBox("Only in a file that holds more than one namespace")
+                                .bindSelected(config::blockSpanNamespacesOnlyWithSeveralNamespaces)
+                                .comment(
+                                    "The same rule as under Types, counting namespaces. A " +
+                                        "namespace alone in its file spans the file, so its " +
+                                        "span would only restate the file's length.",
+                                )
+                        }
+                    }.enabledIf(spanNamespaces.selected)
+
                     row("Span towards grey, %:") {
                         spinner(PERCENT_RANGE, PERCENT_STEP)
                             .bindIntValue(config::blockSpanMarkerGreyPercent)
@@ -328,8 +409,13 @@ class AllmanConfigurable : BoundConfigurable("Allman View") {
                     }
                     rowsRange {
                         row {
-                            checkBox("Methods").bindSelected(config::accentMethods)
-                                .comment("fun Update")
+                            checkBox("Methods and operators").bindSelected(config::accentMethods)
+                                .comment(
+                                    "fun Update, and an operator or conversion under its own " +
+                                        "label: op +, op ==, op int. One switch, because an " +
+                                        "operator is a method -- only \"fun +\" would have " +
+                                        "read as a method called +.",
+                                )
                         }
                         row {
                             checkBox("Constructors and destructors")

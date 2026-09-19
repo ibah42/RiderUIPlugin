@@ -15,6 +15,19 @@ internal class OpenBlock(
     /** Where the declaration starts, which for a multi-line signature is not the brace line. */
     val headerOffset: Int = -1,
 ) {
+    /**
+     * The line the declaration starts on -- the line carrying the name -- as opposed to
+     * [openLineNumber], which is the line the `{` is on. They differ by one in a source already
+     * written in Allman style, and by more when the signature spans lines.
+     *
+     * Attributes on their own lines above the declaration are deliberately not included: the
+     * scanner remembers one previous line of code, and walking further up would mean deciding
+     * what else belongs -- doc comments, blank lines, `#if` -- for a marker that is cosmetic.
+     *
+     * Defaults to [openLineNumber] for a block that never reached [BlockClassifier.classify].
+     */
+    var headerLineNumber: Int = openLineNumber
+
     /** Filled in when the block is pushed, so the closing brace reports the same value. */
     var isNested: Boolean = false
 
@@ -40,12 +53,25 @@ internal class OpenBlock(
  */
 internal class BlockClassifier(private val options: ScanOptions) {
 
+
     /**
      * Order matters: a namespace header matches nothing else, so it goes first; a function is
      * last because it is the fallback that also recognises lambdas, constructors, destructors,
      * property accessors and the property declaration itself.
      */
-    fun classify(rawHeader: String, headerStart: Int, lineNumber: Int): OpenBlock {
+    fun classify(
+        rawHeader: String,
+        headerStart: Int,
+        lineNumber: Int,
+        headerLineNumber: Int,
+    ): OpenBlock {
+        val block = classifyHeader(rawHeader, headerStart, lineNumber)
+        block.headerLineNumber = headerLineNumber
+        return block
+    }
+
+    /** The classification itself; [classify] only records where the declaration began. */
+    private fun classifyHeader(rawHeader: String, headerStart: Int, lineNumber: Int): OpenBlock {
         val header = HeaderReader.declarationPart(rawHeader)
 
         if (options.accentNamespaces) {
@@ -95,6 +121,9 @@ internal class BlockClassifier(private val options: ScanOptions) {
         if (block.keyword == PROPERTY_KEYWORD) {
             return options.accentProperties
         }
+        // An operator falls through to the methods switch below: it carries its own label
+        // ([OPERATOR_KEYWORD] plus the operator itself), but it is a method in every other
+        // respect and is turned on and off with one.
         if (block.keyword in ACCESSOR_KEYWORDS) {
             return options.accentAccessors
         }
@@ -124,7 +153,22 @@ internal class BlockClassifier(private val options: ScanOptions) {
     }
 
     private fun classifyTypeHeader(header: String, headerStart: Int, lineNumber: Int): OpenBlock? {
-        val keywordIndex = HeaderReader.findKeyword(header, TYPE_KEYWORDS)
+        // A type's own keyword always stands in front of any parameter list the header has --
+        // a positional record's `(int X, int Y)`, or a primary constructor's. One found INSIDE
+        // a parameter list is something else entirely: `record` is contextual in C#, so
+        // `void Save(Record record)` is an ordinary method with an ordinarily named parameter,
+        // and searching the whole header made it a type declaration called `Record`.
+        val parameterList = HeaderReader.parameterListStart(header)
+        val searchable: String
+        if (parameterList < 0) {
+            searchable = header
+        } else {
+            searchable = header.substring(0, parameterList)
+        }
+
+        // Indices into `searchable` are indices into `header`: it is a prefix of it, so
+        // everything below goes on reading the whole header from here.
+        val keywordIndex = HeaderReader.findKeyword(searchable, TYPE_KEYWORDS)
         if (keywordIndex < 0) {
             return null
         }
@@ -192,10 +236,28 @@ internal class BlockClassifier(private val options: ScanOptions) {
             return otherBlock(lineNumber)
         }
 
-        val parenIndex = header.indexOf('(')
+        val parenIndex = HeaderReader.parameterListStart(header)
         if (parenIndex < 0) {
             return otherBlock(lineNumber)
         }
+
+        // Before the assignment test below, not after: `operator +=` and `operator ==` both put
+        // an `=` in front of the parameter list without being assignments to anything.
+        val operatorBlock = classifyOperatorHeader(header, headerStart, lineNumber, parenIndex)
+        if (operatorBlock != null) {
+            return operatorBlock
+        }
+
+        if (declaresATypeOrNamespace(header, parenIndex)) {
+            // `public record Point(int X)` and `public class Node(int id)` -- a positional
+            // record and a primary constructor both end in a parameter list, so unlike a plain
+            // `class Foo` they reach this far. Getting here at all means accentTypes is off (a
+            // type header is claimed above otherwise), and off has to mean invisible, not
+            // relabelled `fun Point`. The same rule [classifyPropertyHeader] already applies to
+            // the other fallback.
+            return otherBlock(lineNumber)
+        }
+
         if (HeaderReader.containsAssignment(header.substring(0, parenIndex))) {
             // `var a = new Foo() {` is an initializer, not a declaration. Only the part before
             // the parameter list is checked: `void Foo(int x = 5) {` has an `=` too, and that
@@ -217,6 +279,66 @@ internal class BlockClassifier(private val options: ScanOptions) {
             return namedBlock(BlockKind.FUNCTION, keyword, header, headerStart, nameIndex, lineNumber)
         }
         return namedBlock(BlockKind.FUNCTION, FUNCTION_KEYWORD, header, headerStart, nameIndex, lineNumber)
+    }
+
+    /**
+     * Whether a type or namespace keyword stands in front of the parameter list.
+     *
+     * Only the part before the list is searched, which is what keeps an ordinary method safe:
+     * `void Foo(int record)` names a parameter with a contextual keyword and is none of this
+     * function's business, while `public record Point(int X)` puts the word where a return type
+     * would go. [HeaderReader.findKeyword] matches whole words only, so `void RecordEvent()`
+     * does not count either.
+     */
+    private fun declaresATypeOrNamespace(header: String, parenIndex: Int): Boolean {
+        val beforeParameters = header.substring(0, parenIndex)
+        return HeaderReader.findKeyword(beforeParameters, TYPE_KEYWORDS) >= 0 ||
+            HeaderReader.findKeyword(beforeParameters, NAMESPACE_KEYWORDS) >= 0
+    }
+
+    /**
+     * `public static Foo operator +(Foo a, Foo b)` and
+     * `public static implicit operator int(Foo a)`.
+     *
+     * Both were invisible before: what stands in front of the parameter list is `+`, or a type
+     * keyword like `int`, and the ordinary path looks for an identifier there -- it finds none
+     * in the first case and, in the second, reads the conversion's target type as if it were the
+     * method's name (`fun int`).
+     *
+     * The name is whatever the source writes between `operator` and the parameter list, verbatim
+     * and without being required to be an identifier: `op +`, `op ==`, `op int`. That is the
+     * only thing that tells two operators of the same type apart, and it is also where the
+     * colour is sampled, so the label matches what the editor paints there.
+     */
+    private fun classifyOperatorHeader(
+        header: String,
+        headerStart: Int,
+        lineNumber: Int,
+        parenIndex: Int,
+    ): OpenBlock? {
+        val keywordIndex = HeaderReader.findKeyword(header.substring(0, parenIndex), OPERATOR_KEYWORDS)
+        if (keywordIndex < 0) {
+            return null
+        }
+
+        val nameStart = HeaderReader.skipSpacesIn(header, keywordIndex + OPERATOR_WORD.length)
+        var nameEnd = parenIndex
+        while (nameEnd > nameStart && header[nameEnd - 1].isWhitespace()) {
+            nameEnd--
+        }
+        if (nameStart >= nameEnd) {
+            // `operator(` with nothing between the two: not a declaration this understands
+            return null
+        }
+
+        return spannedBlock(
+            BlockKind.FUNCTION,
+            OPERATOR_KEYWORD,
+            headerStart,
+            nameStart,
+            nameEnd - nameStart,
+            lineNumber,
+        )
     }
 
     /**
@@ -487,10 +609,27 @@ internal class BlockClassifier(private val options: ScanOptions) {
             )
         }
         val name = HeaderReader.identifierAt(header, nameIndex)
+        return spannedBlock(kind, keyword, headerStart, nameIndex, name.length, lineNumber, isLambda)
+    }
+
+    /**
+     * A block whose name is an explicit span of the header rather than an identifier read from
+     * it. [namedBlock] covers everything whose name is a plain identifier; this is for the one
+     * thing that is not -- an operator's `+`, `==`, `int`.
+     */
+    private fun spannedBlock(
+        kind: BlockKind,
+        keyword: String,
+        headerStart: Int,
+        nameIndex: Int,
+        nameLength: Int,
+        lineNumber: Int,
+        isLambda: Boolean = false,
+    ): OpenBlock {
         return OpenBlock(
             kind,
             headerStart + nameIndex,
-            name.length,
+            nameLength,
             keyword,
             lineNumber,
             isLambda = isLambda,
@@ -515,11 +654,12 @@ internal class BlockClassifier(private val options: ScanOptions) {
         /** `~Foo() { }`. */
         const val DESTRUCTOR_KEYWORD = "dtor"
 
-        /** The property declaration itself, wrapping its accessors. */
-        const val PROPERTY_KEYWORD = "prop"
-
         /** An indexer's own name, as the source writes it: `public int this[int i]`. */
         const val INDEXER_KEYWORD = "this"
+
+        /** The word the source spells it with, and the set [HeaderReader.findKeyword] wants. */
+        const val OPERATOR_WORD = "operator"
+        val OPERATOR_KEYWORDS = setOf(OPERATOR_WORD)
 
         /** What a namespace's label prints, standing in for the keyword a type or function has. */
         const val NAMESPACE_LABEL = "ns"

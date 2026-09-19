@@ -174,6 +174,14 @@ class BraceScanner(
     private var previousCodeStart = -1
     private var previousCodeEnd = -1
 
+    /**
+     * The line [previousCodeStart] is on, kept in step with it. Without this the Allman case --
+     * the `{` on its own line, the declaration above it -- has the header's offset but not its
+     * line, and a block's length would have to be measured from the brace instead of from the
+     * declaration.
+     */
+    private var previousCodeLineNumber = -1
+
     // --- lexer state ---
 
     private var lexerState = LexerState.CODE
@@ -214,7 +222,26 @@ class BraceScanner(
         }
         finishLine(textLength)
         finalizeSiblingOrdinals()
-        return ScanResult(foundSites, foundAccents)
+        return ScanResult(foundSites, foundAccents, blockCounts(foundAccents))
+    }
+
+    /** One pass over the finished accents rather than a counter threaded through the scan. */
+    private fun blockCounts(accents: List<BraceAccent>): BlockCounts {
+        var types = 0
+        var namespaces = 0
+
+        for (accent in accents) {
+            if (!accent.isOpening) {
+                continue
+            }
+            if (accent.kind == BlockKind.TYPE) {
+                types++
+            }
+            if (accent.kind == BlockKind.NAMESPACE) {
+                namespaces++
+            }
+        }
+        return BlockCounts(types, namespaces)
     }
 
     // ------------------------------------------------------------------- lexer states
@@ -620,7 +647,9 @@ class BraceScanner(
         emitLine(lineEndOffset)
 
         if (lineStartsInCode && firstCodeOffset >= 0 && lastCodeOffset >= 0) {
-            if (previousCodeEnd >= 0 && (isWhereConstraintLine() || isColonContinuationLine())) {
+            if (previousCodeEnd >= 0 &&
+                (isWhereConstraintLine() || isColonContinuationLine() || followsUnfinishedDeclaration())
+            ) {
                 // `where T : IFoo` on its own line, after a multi-line parameter list already
                 // closed its parentheses, and `: base(...)`/`: this(...)` or a wrapped base-type
                 // list on its own line, both continue the declaration above them. bracketDepth is
@@ -629,10 +658,15 @@ class BraceScanner(
                 // header down to just this one clause, losing the declaration itself (name,
                 // modifiers, return type, all of it). The declaration above still owns the
                 // header, so only the end is extended.
+                //
+                // The third case is the same clause running past one line: only its FIRST line
+                // starts with the `:`, so the second and later ones are recognised by what the
+                // line above them ended with instead.
                 previousCodeEnd = lastCodeOffset + 1
             } else {
                 previousCodeStart = statementLineStartOffset
                 previousCodeEnd = lastCodeOffset + 1
+                previousCodeLineNumber = statementLineNumber
             }
         }
 
@@ -983,7 +1017,11 @@ class BraceScanner(
             return
         }
         val block = blockStack.removeLast()
-        val spannedLines = lineNumber - block.openLineNumber
+        // From the declaration, not from the brace: in a source already written in Allman
+        // style the two are a line apart, and a multi-line signature puts several between
+        // them. Every threshold in the plugin reads this, so the marker that prints it cannot
+        // drift from the rule that decided to print it.
+        val spannedLines = lineNumber - block.headerLineNumber
         rememberAccent(braceOffset, block, isOpening = false, spannedLines = spannedLines)
 
         // Back to the outer statement's own bracket nesting, exactly as it was left.
@@ -1100,6 +1138,15 @@ class BraceScanner(
 
         var headerStart = headerStartFor(braceOffset)
         var headerEnd = braceOffset
+        // The statement's own first line, which a multi-line signature keeps for all of them:
+        // exactly the line the name is written on. Same correction as [headerStartFor] makes to
+        // the offset, so the two never disagree about where the declaration began.
+        var headerLineNumber: Int
+        if (continuesDeclarationAbove()) {
+            headerLineNumber = statementNumberBeforeContinuation
+        } else {
+            headerLineNumber = statementLineNumber
+        }
 
         if (firstCodeOffset == braceOffset) {
             // the brace is the first code on the line, so the code is Allman and the header is above
@@ -1108,6 +1155,7 @@ class BraceScanner(
             }
             headerStart = previousCodeStart
             headerEnd = previousCodeEnd
+            headerLineNumber = previousCodeLineNumber
         }
 
         if (headerStart >= headerEnd) {
@@ -1115,7 +1163,7 @@ class BraceScanner(
         }
 
         val rawHeader = text.subSequence(headerStart, headerEnd).toString()
-        return classifier.classify(rawHeader, headerStart, lineNumber)
+        return classifier.classify(rawHeader, headerStart, lineNumber, headerLineNumber)
     }
 
 
@@ -1125,9 +1173,22 @@ class BraceScanner(
      * Usually the start of the line the construct began on, so a multi-line signature is read
      * whole. But when the line already had braces, the header starts after the last of them:
      * otherwise in `class A { void M() {` the second brace would see `class` and pass as a type.
+     *
+     * And when this line is itself a continuation of the declaration above -- a `where` clause
+     * or a constructor's `: base(...)` -- the statement started further up still. [finishLine]
+     * undoes the premature reset too, but only once the line is over, which is too late for a
+     * brace hanging off the end of that very line:
+     * ```
+     * public WithBaseCall(int value)
+     *     : base() {
+     * ```
+     * Without this the header is `: base()` alone and the constructor is not seen at all.
      */
     private fun headerStartFor(braceOffset: Int): Int {
         var start = statementLineStartOffset
+        if (continuesDeclarationAbove()) {
+            start = statementStartBeforeContinuation
+        }
         for (offset in lineBraceOpenOffsets) {
             if (offset < braceOffset && offset + 1 > start) {
                 start = offset + 1
@@ -1150,6 +1211,25 @@ class BraceScanner(
      * the time it is its own line, bracketDepth is already back to 0 and it looks exactly like
      * the start of a brand new statement -- see the caller in [finishLine].
      */
+    /**
+     * Whether the line being scanned right now continues the declaration above it, asked in the
+     * middle of that line rather than at its end.
+     *
+     * [finishLine] asks the same question once the line is over and repairs the bookkeeping
+     * then, which is soon enough for a brace on the NEXT line but too late for one hanging off
+     * the end of this one. Both callers -- the header's offset and the header's line number --
+     * go through here so they cannot disagree about where the declaration started.
+     *
+     * Deliberately not [followsUnfinishedDeclaration]: a trailing comma also ends every element
+     * of a `{ }` initializer list, and `new Point2 {` on the line after one owns its own header.
+     */
+    private fun continuesDeclarationAbove(): Boolean {
+        if (previousCodeEnd < 0 || firstCodeOffset < 0) {
+            return false
+        }
+        return isWhereConstraintLine() || isColonContinuationLine()
+    }
+
     private fun isWhereConstraintLine(): Boolean {
         if (!matchesAt(firstCodeOffset, WHERE_KEYWORD)) {
             return false
@@ -1166,6 +1246,31 @@ class BraceScanner(
      */
     private fun isColonContinuationLine(): Boolean {
         return charAt(firstCodeOffset) == ':' && charAt(firstCodeOffset + 1) != ':'
+    }
+
+    /**
+     * Whether the code line above ended in the middle of something, so this line finishes it:
+     * a trailing `,` or a trailing `:` (`::` excluded, as in [isColonContinuationLine]).
+     *
+     * This is what carries a base-type list past its first wrapped line. `: IBar,` is recognised
+     * by its own leading colon, but the `IBaz` under it starts with an ordinary identifier and
+     * is indistinguishable from a brand new statement -- except that the line above it promised
+     * more. Without this the header the classifier sees shrinks to that last line alone and a
+     * class with two interfaces over three lines is not recognised as a class at all.
+     *
+     * Read only for the header bookkeeping, never for the phantom indent: a trailing comma is
+     * also how every element of a `{ }` initializer list ends, and those must keep taking their
+     * indent from their own line.
+     */
+    private fun followsUnfinishedDeclaration(): Boolean {
+        if (previousCodeEnd <= 0 || previousCodeEnd > textLength) {
+            return false
+        }
+        val last = text[previousCodeEnd - 1]
+        if (last == ',') {
+            return true
+        }
+        return last == ':' && charAt(previousCodeEnd - 2) != ':'
     }
 
     private fun markCode(offset: Int) {

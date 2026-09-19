@@ -1,6 +1,8 @@
 package com.hitapps.allmanview
 
 import com.hitapps.allmanview.scan.BlockKind
+import com.hitapps.allmanview.scan.BlockSpanConfig
+import com.hitapps.allmanview.scan.BlockSpanGroup
 import com.hitapps.allmanview.scan.Dialects
 import com.intellij.openapi.components.BaseState
 import com.intellij.openapi.components.Service
@@ -27,6 +29,10 @@ data class AccentConfig(
     val labelMinLines: Int,
     val labelGreyPercent: Int,
 )
+
+// BlockSpanGroup and BlockSpanConfig live in the scan package, with the rules that read them
+// (com.hitapps.allmanview.scan.LabelPolicy). They are plain data with no IntelliJ in them, and
+// keeping them next to the decisions is what makes those decisions unit-testable.
 
 @Service(Service.Level.APP)
 @State(name = "AllmanView", storages = [Storage("allman-view.xml")])
@@ -110,8 +116,10 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
         var siblingNumberingEndOfBlockMinLines: Int by property(15)
 
         /**
-         * Master switch for the block-span marker: `{: 920  Δ: 143` at the very end of a very
-         * long block's label -- the line its `{` is on, and how many lines down its `}` is.
+         * Master switch for the block-span marker: `↑: 920  Δ: 143` at the very end of a very
+         * long block's label -- the line it is **declared** on, and how many lines down its
+         * `}` is. The declaration's line rather than the brace's, because that is what every
+         * length in this component is measured from.
          *
          * The only marker with nothing on the declaration line: standing on line 920 you can
          * already see that the block starts there. It is useful in exactly the opposite place,
@@ -119,15 +127,43 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
          */
         var blockSpanMarkerEnabled: Boolean by property(true)
 
+        // The span marker is split four ways, because "long" means something different for
+        // each: a 40-line property is enormous, a 40-line class is ordinary. Each group has
+        // its own switch and its own length, and none of them asks for anything else to be
+        // drawn: the span is the coarsest marker here and reads on its own, so a block short
+        // of its kind's label length still reports it.
+
+        var blockSpanTypes: Boolean by property(true)
+        var blockSpanTypeMinLines: Int by property(100)
+
         /**
-         * How long a block must be before it reports its own span. Well above every other
-         * threshold on purpose: this marker answers "how much did I just scroll past", which
-         * is only a question once the answer is genuinely hard to guess.
+         * Report a type's span only in a file that holds more than one type, anywhere in it --
+         * nesting does not matter, the count is the file's.
          *
-         * Reaching it is also a reason to name the block -- see [BraceAccentStyle.needsLabel] --
-         * so the span never stands on a closing brace with nothing to say what it spans.
+         * The span answers "which of these, and how far back did it begin", and that is only a
+         * question where there is something to confuse it with. One class in a file has no
+         * competition: nothing else could have ended there. A generated file with fourteen of
+         * them, hundreds of lines each, is where the marker pays for itself.
          */
-        var blockSpanMarkerMinLines: Int by property(100)
+        var blockSpanTypesOnlyWithSeveralTypes: Boolean by property(true)
+
+        /** Methods, constructors, destructors and lambdas -- everything but properties. */
+        var blockSpanFunctions: Boolean by property(true)
+        var blockSpanFunctionMinLines: Int by property(60)
+
+        /** A property's own block and its accessors, which run far shorter than a method. */
+        var blockSpanProperties: Boolean by property(true)
+        var blockSpanPropertyMinLines: Int by property(40)
+
+        var blockSpanNamespaces: Boolean by property(true)
+        var blockSpanNamespaceMinLines: Int by property(150)
+
+        /**
+         * The same restriction for namespaces, counting namespaces: its own switch, and its own
+         * count. A namespace alone in its file spans the file, so its span would only restate
+         * the file's length.
+         */
+        var blockSpanNamespacesOnlyWithSeveralNamespaces: Boolean by property(true)
 
         /**
          * How far the block-span marker moves from the editor's **line-number** colour towards
@@ -279,6 +315,38 @@ class AllmanSettings : SimplePersistentStateComponent<AllmanSettings.Config>(Con
                 showLabel = state.namespaceLabel,
                 labelMinLines = NAMESPACE_LABEL_MIN_LINES,
                 labelGreyPercent = state.namespaceLabelGreyPercent,
+            )
+        }
+        return null
+    }
+
+    /** Block-span settings for one group, or null when that group is switched off. */
+    fun blockSpanFor(group: BlockSpanGroup): BlockSpanConfig? {
+        if (!state.blockSpanMarkerEnabled) {
+            return null
+        }
+        if (group == BlockSpanGroup.TYPE && state.blockSpanTypes) {
+            return BlockSpanConfig(
+                minLines = state.blockSpanTypeMinLines,
+                onlyWithSeveral = state.blockSpanTypesOnlyWithSeveralTypes,
+            )
+        }
+        if (group == BlockSpanGroup.FUNCTION && state.blockSpanFunctions) {
+            return BlockSpanConfig(
+                minLines = state.blockSpanFunctionMinLines,
+                onlyWithSeveral = false,
+            )
+        }
+        if (group == BlockSpanGroup.PROPERTY && state.blockSpanProperties) {
+            return BlockSpanConfig(
+                minLines = state.blockSpanPropertyMinLines,
+                onlyWithSeveral = false,
+            )
+        }
+        if (group == BlockSpanGroup.NAMESPACE && state.blockSpanNamespaces) {
+            return BlockSpanConfig(
+                minLines = state.blockSpanNamespaceMinLines,
+                onlyWithSeveral = state.blockSpanNamespacesOnlyWithSeveralNamespaces,
             )
         }
         return null

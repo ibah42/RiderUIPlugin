@@ -1735,4 +1735,721 @@ class BraceScannerTest {
         val property = openings(src).single { it.keyword == "prop" }
         assertEquals("Values", accentName(src, property))
     }
+
+    // --- switch permutations -------------------------------------------------------------
+    //
+    // The tests above turn one switch off at a time. These turn every switch off in every
+    // combination -- 256 of them -- because the bugs that actually shipped were never a single
+    // switch misbehaving: they were one switch changing what another one did.
+
+    /** One of every kind of block the scanner knows, so a single scan can be asked about all. */
+    private fun oneOfEveryBlockKind(): String {
+        return "namespace Space\n" +
+            "{\n" +
+            "    class Holder\n" +
+            "    {\n" +
+            "        struct Inner\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        static Holder()\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        public Holder()\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        ~Holder()\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        public int Value\n" +
+            "        {\n" +
+            "            get\n" +
+            "            {\n" +
+            "            }\n" +
+            "        }\n" +
+            "\n" +
+            "        public static Holder operator +(Holder a, Holder b)\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        public void Method()\n" +
+            "        {\n" +
+            "            Run(() =>\n" +
+            "            {\n" +
+            "            });\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n"
+    }
+
+    /**
+     * What to call a block in these tests: its keyword, except a lambda, which shares `fun`
+     * with an ordinary method and would otherwise be indistinguishable from one.
+     */
+    private fun blockIdentity(accent: BraceAccent): String {
+        if (accent.isLambda) {
+            return "lambda"
+        }
+        return accent.keyword
+    }
+
+    /**
+     * Every block in [oneOfEveryBlockKind], in document order, next to the switch that decides
+     * whether the scanner reports it at all.
+     *
+     * Written out by hand on purpose. The point of the permutation tests is to disagree with
+     * the classifier when it is wrong, which it cannot do if it gets the answer from the same
+     * code it is checking.
+     */
+    private fun blockSwitchOwners(): List<Pair<String, (ScanOptions) -> Boolean>> {
+        return listOf(
+            "ns" to { options: ScanOptions -> options.accentNamespaces },
+            "class" to { options: ScanOptions -> options.accentTypes },
+            "struct" to { options: ScanOptions -> options.accentTypes },
+            "static ctor" to { options: ScanOptions ->
+                options.accentFunctions && options.accentConstructors
+            },
+            "ctor" to { options: ScanOptions ->
+                options.accentFunctions && options.accentConstructors
+            },
+            "dtor" to { options: ScanOptions ->
+                options.accentFunctions && options.accentConstructors
+            },
+            "prop" to { options: ScanOptions ->
+                options.accentFunctions && options.accentProperties
+            },
+            "get" to { options: ScanOptions ->
+                options.accentFunctions && options.accentAccessors
+            },
+            // An operator shares the methods switch: its own label, but a method's switch.
+            "op" to { options: ScanOptions -> options.accentFunctions && options.accentMethods },
+            "fun" to { options: ScanOptions -> options.accentFunctions && options.accentMethods },
+            "lambda" to { options: ScanOptions ->
+                options.accentFunctions && options.accentLambdas
+            },
+        )
+    }
+
+    /** Bit `n` of [mask] is the nth switch, so counting to 256 walks every combination once. */
+    private fun switchCombination(mask: Int): ScanOptions {
+        return ScanOptions(
+            accentTypes = mask shr 0 and 1 == 1,
+            accentFunctions = mask shr 1 and 1 == 1,
+            accentMethods = mask shr 2 and 1 == 1,
+            accentConstructors = mask shr 3 and 1 == 1,
+            accentProperties = mask shr 4 and 1 == 1,
+            accentAccessors = mask shr 5 and 1 == 1,
+            accentLambdas = mask shr 6 and 1 == 1,
+            accentNamespaces = mask shr 7 and 1 == 1,
+        )
+    }
+
+    /**
+     * Which combination this is, in words. The stub-friendly `assertEquals(String, String)` has
+     * nowhere to put a message, so the combination is folded into both sides of the comparison
+     * instead: a failure then names the switches that produced it rather than leaving 256
+     * indistinguishable runs to guess between.
+     */
+    private fun describeSwitches(options: ScanOptions): String {
+        return "types=" + options.accentTypes +
+            " functions=" + options.accentFunctions +
+            " methods=" + options.accentMethods +
+            " constructors=" + options.accentConstructors +
+            " properties=" + options.accentProperties +
+            " accessors=" + options.accentAccessors +
+            " lambdas=" + options.accentLambdas +
+            " namespaces=" + options.accentNamespaces
+    }
+
+    private fun openingIdentities(src: String, options: ScanOptions): List<String> {
+        return BraceScanner(src, Flavor.CSHARP, options).scan().accents
+            .filter { it.isOpening }
+            .sortedBy { it.offset }
+            .map { blockIdentity(it) }
+    }
+
+    @Test
+    fun `every combination of the block switches reports exactly the blocks it turns on`() {
+        val src = oneOfEveryBlockKind()
+        val owners = blockSwitchOwners()
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            val expected = owners.filter { it.second(options) }.map { it.first }
+            val actual = openingIdentities(src, options)
+            assertEquals(
+                describeSwitches(options) + " -> " + expected.joinToString(", "),
+                describeSwitches(options) + " -> " + actual.joinToString(", "),
+            )
+        }
+    }
+
+    @Test
+    fun `every combination reports each block's opening and closing brace together`() {
+        val src = oneOfEveryBlockKind()
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            val accents = BraceScanner(src, Flavor.CSHARP, options).scan().accents
+            val opened = accents.filter { it.isOpening }.map { blockIdentity(it) }.sorted()
+            val closed = accents.filter { !it.isOpening }.map { blockIdentity(it) }.sorted()
+            assertEquals(
+                describeSwitches(options) + " -> " + opened.joinToString(", "),
+                describeSwitches(options) + " -> " + closed.joinToString(", "),
+            )
+        }
+    }
+
+    @Test
+    fun `a block leaves the nesting bookkeeping when its parent's switch is off`() {
+        val src = oneOfEveryBlockKind()
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            val openings = BraceScanner(src, Flavor.CSHARP, options).scan().accents
+                .filter { it.isOpening }
+
+            // The lambda sits in a method. Drop methods and the lambda is still reported, but
+            // there is no longer a function around it, so it is not nested in one either.
+            val lambda = openings.firstOrNull { it.isLambda }
+            if (lambda != null) {
+                assertEquals(
+                    describeSwitches(options) + " lambda nested=" + options.accentMethods,
+                    describeSwitches(options) + " lambda nested=" + lambda.isNested,
+                )
+            }
+
+            // Same shape one level down: an accessor sits in a property.
+            val accessor = openings.firstOrNull { it.isAccessor }
+            if (accessor != null) {
+                assertEquals(
+                    describeSwitches(options) + " accessor nested=" + options.accentProperties,
+                    describeSwitches(options) + " accessor nested=" + accessor.isNested,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `sibling numbering ignores the switches of kinds that are never numbered`() {
+        // Two classes in a namespace, two structs in the second class: every ordinal the file
+        // has is a type's, and not one of them is a function's business.
+        val src = "namespace Outer\n" +
+            "{\n" +
+            "    class First\n" +
+            "    {\n" +
+            "        void M()\n" +
+            "        {\n" +
+            "        }\n" +
+            "    }\n" +
+            "\n" +
+            "    class Second\n" +
+            "    {\n" +
+            "        struct A\n" +
+            "        {\n" +
+            "        }\n" +
+            "\n" +
+            "        struct B\n" +
+            "        {\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n"
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            if (!options.accentTypes) {
+                continue
+            }
+            val ordinals = BraceScanner(src, Flavor.CSHARP, options).scan().accents
+                .filter { it.isOpening && it.kind == BlockKind.TYPE }
+                .sortedBy { it.offset }
+                .map { it.siblingOrdinal }
+            assertEquals(
+                describeSwitches(options) + " -> 1, 2, 1, 2",
+                describeSwitches(options) + " -> " + ordinals.joinToString(", "),
+            )
+        }
+    }
+
+    @Test
+    fun `the block switches never change the phantom lines`() {
+        // K&R on purpose: with the braces already on their own lines there would be nothing to
+        // move, and the test would pass without having looked at anything.
+        val src = "class Holder {\n" +
+            "    public void Method() {\n" +
+            "        if (ready) {\n" +
+            "            Run(() => {\n" +
+            "                Step();\n" +
+            "            });\n" +
+            "        } else {\n" +
+            "            Stop();\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n"
+
+        val baseline = BraceScanner(src, Flavor.CSHARP, ScanOptions()).scan().sites
+        assertTrue("the fixture must actually move something", baseline.isNotEmpty())
+        val expected = baseline.sortedBy { it.dimStart }
+            .joinToString(" | ") { it.dimStart.toString() + ":" + it.dimEnd }
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            val actual = BraceScanner(src, Flavor.CSHARP, options).scan().sites
+                .sortedBy { it.dimStart }
+                .joinToString(" | ") { it.dimStart.toString() + ":" + it.dimEnd }
+            assertEquals(
+                describeSwitches(options) + " -> " + expected,
+                describeSwitches(options) + " -> " + actual,
+            )
+        }
+    }
+
+
+    // --- how many blocks of each kind the file holds ---------------------------------------
+    //
+    // What the "only in a file that holds more than one" block-span restriction reads. Counted
+    // over the whole file, nesting included.
+
+    private fun counts(src: String, options: ScanOptions = ScanOptions()): BlockCounts {
+        return BraceScanner(src, Flavor.CSHARP, options).scan().counts
+    }
+
+    @Test
+    fun `a file with one type and one namespace counts one of each`() {
+        val src = "namespace A\n{\n    class C\n    {\n    }\n}\n"
+        assertEquals(BlockCounts(types = 1, namespaces = 1), counts(src))
+    }
+
+    @Test
+    fun `a nested type counts towards the file's total`() {
+        // Nesting does not matter: the question is how many the file holds, not how many share
+        // a container.
+        val src = "namespace A\n{\n    class Outer\n    {\n        struct Inner\n        {\n" +
+            "        }\n    }\n}\n"
+        assertEquals(BlockCounts(types = 2, namespaces = 1), counts(src))
+    }
+
+    @Test
+    fun `two namespaces side by side are both counted`() {
+        val src = "namespace A\n{\n}\n\nnamespace B\n{\n}\n"
+        assertEquals(BlockCounts(types = 0, namespaces = 2), counts(src))
+    }
+
+    @Test
+    fun `a nested namespace counts too`() {
+        assertEquals(2, counts("namespace A\n{\n    namespace B\n    {\n    }\n}\n").namespaces)
+    }
+
+    @Test
+    fun `functions are not counted as types`() {
+        val src = "class C\n{\n    void M()\n    {\n    }\n\n    void N()\n    {\n    }\n}\n"
+        assertEquals(BlockCounts(types = 1, namespaces = 0), counts(src))
+    }
+
+    @Test
+    fun `a keyword inside a string or a comment counts nothing`() {
+        assertEquals(BlockCounts(0, 0), counts("// namespace B\n"))
+        assertEquals(
+            BlockCounts(types = 1, namespaces = 0),
+            counts("class C\n{\n    string s = \"namespace B\";\n}\n"),
+        )
+    }
+
+    @Test
+    fun `a file-scoped namespace opens no block and is not counted`() {
+        // `namespace Foo;` has no braces, so there is no block to put a span marker on.
+        assertEquals(0, counts("namespace A;\n\nclass C\n{\n}\n").namespaces)
+    }
+
+    @Test
+    fun `a kind that is switched off counts zero, and has no block left to ask about`() {
+        val src = "namespace A\n{\n    class C\n    {\n    }\n}\n"
+        assertEquals(0, counts(src, ScanOptions(accentTypes = false)).types)
+        assertEquals(0, counts(src, ScanOptions(accentNamespaces = false)).namespaces)
+    }
+
+    @Test
+    fun `the counts hold steady under every switch combination that reports the kind`() {
+        val src = "namespace A\n{\n    class First\n    {\n        void M()\n        {\n        }\n" +
+            "    }\n\n    class Second\n    {\n    }\n}\n\nnamespace B\n{\n}\n"
+
+        for (mask in 0 until SWITCH_COMBINATIONS) {
+            val options = switchCombination(mask)
+            val expectedTypes = if (options.accentTypes) 2 else 0
+            val expectedNamespaces = if (options.accentNamespaces) 2 else 0
+            val actual = counts(src, options)
+            assertEquals(
+                describeSwitches(options) + " -> $expectedTypes/$expectedNamespaces",
+                describeSwitches(options) + " -> " + actual.types + "/" + actual.namespaces,
+            )
+        }
+    }
+
+    // --- a block's length is measured from its declaration ---------------------------------
+
+    private fun closingSpan(src: String, keyword: String): Int {
+        return BraceScanner(src, Flavor.CSHARP, ScanOptions()).scan().accents
+            .single { !it.isOpening && it.keyword == keyword }
+            .spannedLines
+    }
+
+    @Test
+    fun `a K and R block spans from the line that carries the brace`() {
+        // `class C {` and `}`: the declaration and the brace are the same line, so there is
+        // nothing to tell apart here -- this is the case that must not change.
+        assertEquals(1, closingSpan("class C {\n}\n", "class"))
+    }
+
+    @Test
+    fun `an Allman block spans from the declaration, not from the brace below it`() {
+        // class C / { / } -- three lines, and the declaration is the first of them.
+        assertEquals(2, closingSpan("class C\n{\n}\n", "class"))
+    }
+
+    @Test
+    fun `a signature spread over several lines spans from its first line`() {
+        val src = "class C\n" +
+            "{\n" +
+            "    void M(\n" +
+            "        int a,\n" +
+            "        int b)\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        // The method is declared on line 3 and closes on line 7; the class, line 1 to line 8.
+        assertEquals(4, closingSpan(src, "fun"))
+        assertEquals(7, closingSpan(src, "class"))
+    }
+
+    @Test
+    fun `an attribute on its own line is not part of the block's length`() {
+        val src = "class C\n{\n    [Test]\n    void M()\n    {\n    }\n}\n"
+        // Declared on line 4, closes on line 6. The attribute above is deliberately left out.
+        assertEquals(2, closingSpan(src, "fun"))
+    }
+
+    @Test
+    fun `a where clause does not become the start of the block`() {
+        val src = "class C\n" +
+            "{\n" +
+            "    void M<T>(T value)\n" +
+            "        where T : class\n" +
+            "    {\n" +
+            "    }\n" +
+            "}\n"
+        // Line 3 declares it, line 6 closes it: the constraint on line 4 continues the
+        // declaration rather than starting one.
+        assertEquals(3, closingSpan(src, "fun"))
+    }
+
+    // --- a tuple return type must not be read as the parameter list ------------------------
+
+    @Test
+    fun `a method returning a tuple keeps its own name`() {
+        // The first ( in the header belongs to the tuple, not to the parameter list. Taking it
+        // made the modifier in front of it look like the method's name.
+        val src = "class C\n{\n    public (int, string) GetResult(short token)\n    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("GetResult", accentName(src, method))
+    }
+
+    @Test
+    fun `a method returning a tuple with named elements keeps its own name`() {
+        val src = "class C\n{\n    public (int index, T1 result1) GetResult(short token)\n" +
+            "    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("GetResult", accentName(src, method))
+    }
+
+    @Test
+    fun `a tuple inside a generic return type does not take the name either`() {
+        val src = "class C\n{\n    public static UniTask<(int index, T1 result1)> WhenAny<T1>(UniTask<T1> task)\n" +
+            "    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("WhenAny", accentName(src, method))
+    }
+
+    @Test
+    fun `a bracket inside a default parameter value does not move the parameter list`() {
+        val src = "class C\n{\n    void Write(string suffix = \")\")\n    {\n    }\n}\n"
+        val method = openings(src).single { it.keyword == "fun" }
+        assertEquals("Write", accentName(src, method))
+    }
+
+    // ------------------------------------------------------------------------ records
+
+    @Test
+    fun `a positional record takes its name, not its first parameter`() {
+        val src = "public record Point(int X, int Y)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals(BlockKind.TYPE, opening.kind)
+        assertEquals("record", opening.keyword)
+        assertEquals("Point", accentName(src, opening))
+    }
+
+    @Test
+    fun `a positional record with a base call keeps its own name`() {
+        // The parameter list is followed by `: Shape`, exactly like a constructor initializer.
+        val src = "public record Point(int X, int Y) : Shape(X)\n{\n}"
+        assertEquals("Point", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a record class and a readonly record struct both take the name after the keywords`() {
+        val recordClass = "public record class Handle(int Id)\n{\n}"
+        assertEquals("Handle", accentName(recordClass, accents(recordClass).first()))
+
+        val recordStruct = "public readonly record struct Point(int X)\n{\n}"
+        assertEquals("Point", accentName(recordStruct, accents(recordStruct).first()))
+    }
+
+    @Test
+    fun `a positional record with default parameter values is still a record`() {
+        val src = "public record Options(int Retries = 3, string Tag = \"\")\n{\n}"
+        val opening = accents(src).first()
+        assertEquals("record", opening.keyword)
+        assertEquals("Options", accentName(src, opening))
+    }
+
+    @Test
+    fun `a record with a wrapped base list keeps its name`() {
+        val src = "public record Point(int X)\n    : Shape,\n      IComparable<Point>\n{\n}"
+        assertEquals("Point", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a record nested in a record is nested and numbered like any other type`() {
+        val src = "public record Outer\n{\n" +
+            "    public record First(int X)\n    {\n    }\n" +
+            "    public record Second(int Y)\n    {\n    }\n" +
+            "}\n"
+        val nested = openings(src).filter { it.isNested }
+        assertEquals(listOf("First", "Second"), nested.map { accentName(src, it) })
+        assertEquals(listOf(1, 2), nested.map { it.siblingOrdinal })
+    }
+
+    @Test
+    fun `a record's members are classified like any other type's`() {
+        val src = "public record Point(int X)\n{\n" +
+            "    public int Doubled\n    {\n        get\n        {\n        }\n    }\n" +
+            "    public void Describe()\n    {\n    }\n" +
+            "    public static Point operator +(Point a, Point b)\n    {\n    }\n" +
+            "}\n"
+        assertEquals(
+            listOf("record", "prop", "get", "fun", "op"),
+            openings(src).map { it.keyword },
+        )
+    }
+
+    @Test
+    fun `a record is measured from its declaration, like every other block`() {
+        val src = "public record Point(\n    int X,\n    int Y)\n{\n}"
+        val closing = accents(src).first { !it.isOpening }
+        // The `}` is on line 5 (1-based), the declaration on line 1.
+        assertEquals(4, closing.spannedLines)
+    }
+
+    @Test
+    fun `accentTypes=false leaves a record unreported`() {
+        // Not "reported as a function": a positional record ends in a parameter list, so unlike
+        // a plain `class Foo` it reaches the function fallback, and used to come back `fun Point`.
+        val src = "public record Point(int X)\n{\n}"
+        assertTrue(openingKeywords(src, ScanOptions(accentTypes = false)).isEmpty())
+    }
+
+    @Test
+    fun `accentTypes=false leaves a primary constructor unreported too`() {
+        val src = "public class Node(int id)\n{\n}"
+        assertTrue(openingKeywords(src, ScanOptions(accentTypes = false)).isEmpty())
+    }
+
+    @Test
+    fun `a parameter named with a contextual keyword does not make a method a type`() {
+        // `record` is contextual in C#, so `Record record` is an ordinary parameter with an
+        // ordinary name. Searching the whole header for a type keyword turned this into a type
+        // declaration called `Record`.
+        val src = "public void Save(Record record)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals(BlockKind.FUNCTION, opening.kind)
+        assertEquals("fun", opening.keyword)
+        assertEquals("Save", accentName(src, opening))
+    }
+
+    @Test
+    fun `a condition mentioning a contextual keyword stays an ordinary block`() {
+        val src = "if (record != null)\n{\n}"
+        assertTrue(accents(src).isEmpty())
+    }
+
+    @Test
+    fun `a local named with a contextual keyword does not make a loop a type`() {
+        val src = "foreach (var record in records)\n{\n}"
+        assertTrue(accents(src).isEmpty())
+    }
+
+    // ------------------------------------------------------ operators and conversions
+
+    @Test
+    fun `an operator overload is labelled op with the operator itself as its name`() {
+        val src = "public static Foo operator +(Foo a, Foo b)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals(BlockKind.FUNCTION, opening.kind)
+        assertEquals("op", opening.keyword)
+        assertEquals("+", src.substring(opening.nameOffset, opening.nameOffset + opening.nameLength))
+    }
+
+    @Test
+    fun `a two-character operator keeps both characters`() {
+        // The `=` in `==` must not read as an initializer's assignment either.
+        val src = "public static bool operator ==(Foo a, Foo b)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals("op", opening.keyword)
+        assertEquals("==", src.substring(opening.nameOffset, opening.nameOffset + opening.nameLength))
+    }
+
+    @Test
+    fun `a conversion operator is named after the type it converts to`() {
+        val src = "public static implicit operator int(Foo a)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals("op", opening.keyword)
+        assertEquals("int", src.substring(opening.nameOffset, opening.nameOffset + opening.nameLength))
+    }
+
+    @Test
+    fun `an explicit conversion operator is recognised the same way`() {
+        val src = "public static explicit operator Foo(int value)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals("op", opening.keyword)
+        assertEquals("Foo", src.substring(opening.nameOffset, opening.nameOffset + opening.nameLength))
+    }
+
+    @Test
+    fun `an operator in Allman style is recognised from the line above`() {
+        val src = "class C\n{\n    public static C operator -(C a)\n    {\n    }\n}\n"
+        assertEquals(listOf("class", "op"), openings(src).map { it.keyword })
+    }
+
+    @Test
+    fun `an operator is turned off by the methods switch, like the method it is`() {
+        val src = "class C\n{\n" +
+            "    public static C operator +(C a, C b)\n    {\n    }\n" +
+            "    public void Work()\n    {\n    }\n" +
+            "}\n"
+        assertTrue("op" in openingKeywords(src, ScanOptions()))
+
+        val keywords = openingKeywords(src, ScanOptions(accentMethods = false))
+        assertTrue("op" !in keywords)
+        assertTrue("fun" !in keywords)
+    }
+
+    @Test
+    fun `an operator answers to the function group's span length, not the property one`() {
+        val operator = BraceAccent(
+            offset = 0,
+            kind = BlockKind.FUNCTION,
+            nameOffset = 0,
+            nameLength = 1,
+            keyword = OPERATOR_KEYWORD,
+            isOpening = false,
+            spannedLines = 70,
+        )
+        assertEquals(BlockSpanGroup.FUNCTION, LabelPolicy.blockSpanGroupOf(operator))
+    }
+
+    @Test
+    fun `a method whose name merely contains the word operator is still a method`() {
+        val src = "public void RunOperatorChecks(int a)\n{\n}"
+        val opening = accents(src).first()
+        assertEquals("fun", opening.keyword)
+        assertEquals("RunOperatorChecks", accentName(src, opening))
+    }
+
+    // ------------------------------------------ a base-type list running past one line
+
+    @Test
+    fun `a constructor whose brace hangs off its base call is still a constructor`() {
+        // The K&R half of the colon-continuation family. The Allman shape -- the `{` on its own
+        // line below `: base()` -- has worked since 1.6.1; this one reached the classifier with
+        // `: base()` as its whole header and came back as nothing at all.
+        val src = "class C : B\n{\n    public C(int value)\n        : base() {\n    }\n}\n"
+        assertEquals(listOf("class", "ctor"), openings(src).map { it.keyword })
+        assertEquals("C", accentName(src, openings(src).first { it.keyword == "ctor" }))
+    }
+
+    @Test
+    fun `a constructor whose brace hangs off its base call is measured from the declaration`() {
+        // The offset and the line number are corrected by the same test, so they cannot
+        // disagree: the header points at line 3 and the span has to be counted from there too.
+        val src = "class C : B\n{\n    public C(int value)\n        : base() {\n    }\n}\n"
+        val closing = accents(src).first { !it.isOpening && it.keyword == "ctor" }
+        // `public C(int value)` is line 3 (1-based) and the ctor's `}` is line 5.
+        assertEquals(2, closing.spannedLines)
+    }
+
+    @Test
+    fun `a where clause with the brace hanging off it keeps the method`() {
+        val src = "public void Bind<T>(T value)\n    where T : class {\n}"
+        val opening = accents(src).first()
+        assertEquals("fun", opening.keyword)
+        assertEquals("Bind", accentName(src, opening))
+    }
+
+    @Test
+    fun `a base list wrapped onto a second line keeps the class`() {
+        val src = "public class Foo\n    : IBar,\n      IBaz\n{\n}"
+        val opening = accents(src).first()
+        assertEquals(BlockKind.TYPE, opening.kind)
+        assertEquals("class", opening.keyword)
+        assertEquals("Foo", accentName(src, opening))
+    }
+
+    @Test
+    fun `a base list broken after a trailing comma keeps the class`() {
+        val src = "public class Foo : IBar,\n                   IBaz\n{\n}"
+        assertEquals("Foo", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a base list broken after a trailing colon keeps the class`() {
+        val src = "public class Foo :\n    IBar,\n    IBaz\n{\n}"
+        assertEquals("Foo", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a generic base wrapped inside its angle brackets keeps the class`() {
+        val src = "public class Foo : Base<int,\n    string>\n{\n}"
+        assertEquals("Foo", accentName(src, accents(src).first()))
+    }
+
+    @Test
+    fun `a wrapped base list is measured from the declaration, not from the last clause`() {
+        val src = "public class Foo\n    : IBar,\n      IBaz\n{\n}"
+        val closing = accents(src).first { !it.isOpening }
+        // The `}` is on line 5 (1-based) and the declaration on line 1.
+        assertEquals(4, closing.spannedLines)
+    }
+
+    @Test
+    fun `a trailing comma inside an initializer does not swallow the next declaration`() {
+        val src = "class C\n{\n" +
+            "    int[] values = new[]\n    {\n        1,\n        2,\n    };\n" +
+            "    public void Work()\n    {\n    }\n" +
+            "}\n"
+        assertEquals(listOf("class", "fun"), openings(src).map { it.keyword })
+        assertEquals("Work", accentName(src, openings(src).first { it.keyword == "fun" }))
+    }
+
+    @Test
+    fun `a constructor is still a constructor when nothing precedes its name`() {
+        val src = "class C\n{\n    public C(int value)\n    {\n    }\n}\n"
+        assertEquals(listOf("class", "ctor"), openings(src).map { it.keyword })
+    }
+
+    private companion object {
+        /** Eight independent switches, so every combination of them is 2^8 runs. */
+        const val SWITCH_COMBINATIONS = 1 shl 8
+    }
 }

@@ -2,6 +2,122 @@
 
 One entry per version bump, newest first. See CLAUDE.md, "Keep a version log", for the rule.
 
+## 1.11.0
+
+- Fixed: a base-type list broken over more than one line made the class vanish -- no colour, no
+  label, no place in the nesting or sibling bookkeeping. `public class Foo : IBar,` with `IBaz`
+  under it, or the same list with the `:` leading, or a generic base wrapped inside its own angle
+  brackets: only the first continuation line starts with the `:` that marked it as one, so every
+  line after it read as a brand new statement and the header shrank to that last line alone. A
+  line whose predecessor ended with `,` or `:` now continues the declaration too. Read only by
+  the header bookkeeping, never by the phantom indent -- a trailing comma is also how every
+  element of a `{ }` initializer list ends.
+- Operator overloads and conversions are recognised. `public static Foo operator +(Foo a, Foo b)`
+  used to get nothing at all, because what stands in front of the parameter list is `+` and the
+  classifier was looking for an identifier; `public static implicit operator int(Foo a)` was
+  worse, labelled `fun int` as if the conversion's target type were the method's name. Both are
+  now `op` plus the operator exactly as the source writes it: `op +`, `op ==`, `op int`. They
+  share the methods switch rather than owning one -- an operator is a method in every respect but
+  its label, and `fun +` would have read as a method called `+`.
+- The span marker no longer claims to point at the `{`. It printed `{: 920` while 920 was the
+  line the block is **declared** on, which is a lie by one line in Allman style and by a whole
+  signature when the signature wraps. It now reads `↑: 920  Δ: 143`, and the settings panel says
+  the same thing.
+- The rules behind the markers moved out of `BraceAccentStyle` into `scan/LabelPolicy.kt`, which
+  has no IntelliJ in it. Which closing brace is named, which reports its span, which repeats its
+  `[N]`, what the span text says -- all of it was previously welded to a live `Editor` and could
+  only be checked by opening a file and looking at it. It now has 21 tests of its own, including
+  the exact case from the report: a 112-line nested class in a file of fifteen types, with the
+  plugin's default settings, reports `↑: 17  Δ: 112`.
+- Fixed: a method with a parameter named `record` was classified as a **type**.
+  `public void Save(Record record)` -- about as ordinary as C# gets -- came back as a type
+  declaration called `Record`, and so did `if (record != null) {` and
+  `foreach (var record in records) {`. `record` is contextual, so it is a legal identifier, and
+  the type-keyword search read the whole header including the parameter list. It now stops at
+  the parameter list: a type's own keyword always stands in front of one.
+- Fixed: with types switched off, a positional record or a primary constructor
+  (`public record Point(int X)`, `public class Node(int id)`) was relabelled `fun Point` instead
+  of going quiet. Both end in a parameter list, so unlike a plain `class Foo` they reached the
+  function fallback. Off means invisible, which is the rule the property fallback already had.
+- New: whole real source files are now scanned by the test suite, from
+  `src/test/resources/samples`. Two kinds of check on them -- invariants that run over every
+  file in the folder with no expected output at all (balanced braces, in-bounds names, ascending
+  offsets, phantom text that matches the document, a deterministic result), so a new file is
+  covered the moment it is dropped in; and a golden file per sample, one readable line per
+  block, which is what catches a class quietly disappearing from a generated source. The folder's
+  own README says why regenerating a golden is a change to the plugin, not a fix to the test.
+  Four UniTask sources to start with, 46 types and 329 blocks between them: the generated
+  `WhenAny` file from the report (fifteen types, tuple return types, tuple base lists),
+  `UniTask.cs` (conversion operators to fully qualified types, two same-named structs at
+  namespace level), `UniTask.Factory.cs` (destructors, a lambda named from the call it is
+  passed to) and `UniTask.Delay.cs` (eleven types, seven static constructors, an enum, a
+  readonly struct nested in a readonly struct).
+- Fixed: a constructor whose brace hangs off its base call was not recognised at all.
+  `public C(int value)` with `: base() {` under it -- the K&R half of the colon-continuation
+  family, whose Allman half was fixed in 1.6.1. The repair in `finishLine` runs once the line is
+  over, which is soon enough for a brace on the next line and too late for one hanging off the
+  end of this one, so the classifier got `: base()` as the whole header. Both the header's
+  offset and its line number are now corrected in the middle of the line, through one shared
+  test, so the two cannot disagree about where the declaration began.
+- New sample, and the only hand-written one: `Zoo.EveryShape.cs`, 808 lines holding every shape
+  the scanner knows and a good number it must ignore -- all four record spellings, five shapes
+  of base-type list, three levels of type nesting with local functions inside them, ten
+  operators, tuple return types, every control construct and initializer, all five kinds of C#
+  string literal with braces inside them, `#if` and `#region`, and a second namespace written
+  K&R. The vendored files could not cover that last part: three of the four are pure Allman and
+  produced no phantom line at all, which left the move mechanic untested by real files. The
+  constructor bug above is the one it found on its first run.
+- Second hand-written sample, `Zoo.LongForm.cs`: 4277 lines, 166 blocks, generated by
+  `tools/gen_longform.py` so its sizes are exact. `Zoo.EveryShape.cs` holds one of everything
+  but almost nothing in it is longer than three lines, so every rule that asks "is this block
+  long enough to mark" went untested by it -- the per-kind label lengths, the repeated `[N]`,
+  the span marker. This one is sized around those thresholds: 46% of its blocks are named at
+  their closing brace and 16% report a span (60% and 30% counted by line), with probes sitting
+  one line either side of every boundary -- 29/30/31 against the function label, 59/60 against
+  the function span, 49/50 and 99/100 against the type's two, 14/15 against the `[N]` repeat.
+  The generator records what it meant to produce and that is cross-checked against what the
+  scanner measures; the two agree on all 163 blocks.
+- Tests grew to 280, from 220. The switch permutation test covers operators as well, and
+  `record` now has a section of its own -- positional, `record class`, `readonly record struct`,
+  default parameter values, a wrapped base list, nesting and numbering, its members. The last two
+  fixes above are both things those tests found, not things anybody reported.
+
+## 1.10.0
+
+- Fixed: a method whose return type is a tuple lost its name. `public (int, T1 result1)
+  GetResult(short token)` was read as a method called `public`, because the name was taken to be
+  the identifier before the first `(` -- and the first `(` there belongs to the tuple, not to the
+  parameter list. One generated UniTask file had fourteen of them. The parameter list is now
+  found by what follows it rather than by its position: the first top-level group the declaration
+  ends with, allowing for a `: base(...)` initializer or a `where` clause after it. Taking the
+  last group instead would have named every constructor after its base call, which is how the
+  first attempt at this was caught.
+- Fixed: a block's length was measured from its opening brace rather than from its declaration.
+  In a source already written in Allman style that is a line short, and a signature spread over
+  several lines is short by all of them. Every threshold in the plugin reads this length, so the
+  span marker now prints numbers that agree with the rule that decided to print them. Attributes
+  on their own lines above a declaration are deliberately left out.
+- The block-span marker is now four settings instead of one, because "long" is not the same
+  number for each: types from 100 lines, functions from 60, properties and their accessors from
+  40, namespaces from 150. Properties are split off from functions on purpose -- a forty-line
+  property is remarkable and a forty-line method is not -- while methods, constructors,
+  destructors and lambdas share one length, since theirs is the same question.
+- New restriction, its own checkbox for types and another for namespaces, both on by default:
+  report the span only in a file that holds more than one block of that kind, counted over the
+  whole file with nesting included. The span answers "which of these, and how far back did it
+  begin", and that is a question only where something could be confused with something else. One
+  class in a file has no competition; fourteen of them, hundreds of lines each, is the case the
+  marker was built for.
+- Corrects 1.9.0: the span marker no longer pulls the end-of-block label in behind it. It is the
+  coarsest marker in the plugin and says something complete on its own -- `{: 920  Δ: 143`
+  reads, where a bare `[3]` does not -- so a block short of its kind's label length now reports
+  its span without also being named. The three reasons to name a block are back to three.
+- The `prop` keyword is now declared once, in the scan model, instead of being spelled out again
+  wherever settings have to recognise a property.
+- Tests grew to 220. The switch permutations added in the previous round paid for themselves
+  immediately: they caught an early exit in the scanner that skipped work it should not have,
+  and the constructor regression above.
+
 ## 1.9.0
 
 - New marker, drawn last on a very long block's end-of-block label: `{: 920  Δ: 143` -- the

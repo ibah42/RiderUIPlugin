@@ -271,6 +271,15 @@ Things that are easy to break:
   see the wrong, deeper value). Missing either one showed up as a constructor with a base-call
   initializer losing its own colour and name, or its hanging brace landing one indent level too
   deep, under the initializer clause instead of the declaration.
+- **A clause can run past its own first line, and only the first line starts with the `:`.**
+  `public class Foo\n    : IBar,\n      IBaz\n{` has a second continuation line beginning with
+  an ordinary identifier, indistinguishable from a new statement except that the line above it
+  ended mid-thought. `followsUnfinishedDeclaration` is that test -- the previous code line ended
+  with `,` or a non-`::` `:` -- and it is deliberately read **only** by the header bookkeeping,
+  never by `readIndent`. A trailing comma is also how every element of a `{ }` initializer list
+  ends, and those must keep taking their indent from their own line. Before this, a class with
+  two interfaces spread over three lines was not recognised as a class at all: no colour, no
+  label, no place in the nesting or sibling bookkeeping.
 - **`BlockKind.FUNCTION` covers more than `fun Name` now.** `BlockClassifier` also recognises a
   constructor (`ctor`), a static constructor (`static ctor`), a destructor (`dtor`), a property's
   own declaration (`prop`) and its accessors (`get`/`set`/`init`) -- all under the same kind and
@@ -279,7 +288,41 @@ Things that are easy to break:
   samples its own keyword instead of a name for both. A constructor is told apart from an
   ordinary method by `scanModifiers`: nothing but modifiers between the header's start and the
   name means no return type precedes it, which is what a constructor looks like and an ordinary
-  method never does.
+  method never does. An operator or conversion (`op`) is there too, and it is the one whose
+  "name" is not an identifier -- `+`, `==`, `int` -- which is why `spannedBlock` exists beside
+  `namedBlock`. It shares the **methods** switch rather than owning one: an operator is a method
+  in every respect but its label, and `fun +` would have read as a method called `+`.
+- **The parameter list is found by what follows it, not by its position.**
+  `HeaderReader.parameterListStart` takes the first top-level `(...)` group the declaration ends
+  with, allowing a `: base(...)` initializer or a `where` clause after it. The first `(` is wrong
+  for a tuple return type (`public (int, T1 result1) GetResult(short token)` would be named
+  `public`), and the last one is wrong for a constructor (it would be named after its base call).
+- **A keyword search must stop at the parameter list.** `record` is contextual in C#, so
+  `void Save(Record record)` is an ordinary method with an ordinarily named parameter --
+  searching the whole header for a type keyword made it a type declaration called `Record`, and
+  did the same to `if (record != null) {`. `classifyTypeHeader` and the guard in
+  `classifyFunctionHeader` both search only `header.substring(0, parameterListStart)`: a type's
+  own keyword always stands in front of any parameter list it has (a positional record's, a
+  primary constructor's), and one found inside a list is somebody's variable.
+- **A kind's switch being off must mean invisible, never relabelled.** Two fallbacks can swallow
+  a block whose own kind is switched off: the property fallback (guarded since 1.7) and the
+  function one, which a plain `class Foo` never reaches but a positional record or a primary
+  constructor does, because both end in a parameter list. Adding a new fallback means adding the
+  same guard, and a test per switch -- the permutation test in `BraceScannerTest` walks all 256
+  combinations for exactly this reason.
+- **Real files are tested too, from `src/test/resources/samples`.** `SampleFilesTest` runs two
+  different things over them. The **invariants** need no expected output and pick up any file
+  dropped into the folder, so they cannot be satisfied by regenerating anything. The **golden
+  file** (`<name>.expected.txt`, one line per block) catches what nobody thought to assert.
+  Regenerating a golden is a change to the plugin's behaviour and belongs in `CHANGELOG.md`; a
+  diff the changelog does not explain is the bug the golden was put there to catch. Read a
+  golden before committing it -- an unread golden is a rubber stamp. See that folder's README.
+- **The marker decisions are pure, and live in `scan/LabelPolicy.kt`.** Which closing brace gets
+  a name, which reports its span, which repeats its `[N]`, what the span text says -- none of it
+  needs an `Editor`, so none of it lives in `BraceAccentStyle` any more. That class now looks up
+  the settings and owns the colours, which genuinely do need the editor, and asks `LabelPolicy`
+  for the rest. Put a new rule there, with a test, rather than back in the style class: the whole
+  point is that "why did this block not print a span" is answerable without opening the IDE.
 
 ### Performance: two refresh timers, not one
 

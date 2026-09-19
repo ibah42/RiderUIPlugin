@@ -1,0 +1,78 @@
+counts: types=10 namespaces=1
+blocks: 75
+
+decl=19 open=20 close=22 span=3 FUNCTION 'fun' name='Continuation'
+decl=13 open=14 close=23 span=10 TYPE 'class' name='AwaiterActions' ordinal=1
+decl=37 open=38 close=41 span=4 FUNCTION 'ctor' name='UniTask'
+decl=47 open=48 close=51 span=4 FUNCTION 'get' name='' nested accessor
+decl=43 open=44 close=52 span=9 FUNCTION 'prop' name='Status'
+decl=56 open=57 close=59 span=3 FUNCTION 'fun' name='GetAwaiter'
+decl=64 open=65 close=70 span=6 FUNCTION 'fun' name='SuppressCancellationThrow'
+decl=74 open=75 close=86 span=12 FUNCTION 'op' name='System.Threading.Tasks.ValueTask'
+decl=90 open=91 close=94 span=4 FUNCTION 'fun' name='ToString'
+decl=99 open=100 close=109 span=10 FUNCTION 'fun' name='Preserve'
+decl=111 open=112 close=127 span=16 FUNCTION 'fun' name='AsAsyncUnitUniTask'
+decl=133 open=134 close=136 span=3 FUNCTION 'ctor' name='AsyncUnitSource'
+decl=138 open=139 close=142 span=4 FUNCTION 'fun' name='GetResult'
+decl=144 open=145 close=147 span=3 FUNCTION 'fun' name='GetStatus'
+decl=149 open=150 close=152 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=154 open=155 close=157 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=159 open=160 close=162 span=3 FUNCTION 'fun' name='GetResult'
+decl=129 open=130 close=163 span=34 TYPE 'class' name='AsyncUnitSource' nested ordinal=1
+decl=169 open=170 close=172 span=3 FUNCTION 'ctor' name='IsCanceledSource'
+decl=174 open=175 close=183 span=9 FUNCTION 'fun' name='GetResult'
+decl=185 open=186 close=188 span=3 FUNCTION 'fun' name='GetResult'
+decl=190 open=191 close=193 span=3 FUNCTION 'fun' name='GetStatus'
+decl=195 open=196 close=198 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=200 open=201 close=203 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=165 open=166 close=204 span=39 TYPE 'class' name='IsCanceledSource' nested ordinal=2
+decl=212 open=213 close=215 span=3 FUNCTION 'ctor' name='MemoizeSource'
+decl=217 open=218 close=251 span=34 FUNCTION 'fun' name='GetResult'
+decl=253 open=254 close=261 span=8 FUNCTION 'fun' name='GetStatus'
+decl=263 open=264 close=273 span=10 FUNCTION 'fun' name='OnCompleted'
+decl=275 open=276 close=283 span=8 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=206 open=207 close=284 span=78 TYPE 'class' name='MemoizeSource' nested ordinal=3
+decl=292 open=293 close=295 span=3 FUNCTION 'ctor' name='Awaiter'
+decl=301 open=302 close=304 span=3 FUNCTION 'get' name='' nested accessor
+decl=297 open=298 close=305 span=8 FUNCTION 'prop' name='IsCompleted'
+decl=309 open=310 close=313 span=4 FUNCTION 'fun' name='GetResult'
+decl=317 open=318 close=327 span=10 FUNCTION 'fun' name='OnCompleted'
+decl=331 open=332 close=341 span=10 FUNCTION 'fun' name='UnsafeOnCompleted'
+decl=348 open=349 close=358 span=10 FUNCTION 'fun' name='SourceOnCompleted'
+decl=286 open=287 close=359 span=73 TYPE 'struct' name='Awaiter' nested ordinal=4
+decl=30 open=31 close=360 span=330 TYPE 'struct' name='UniTask' ordinal=2
+decl=375 open=376 close=380 span=5 FUNCTION 'ctor' name='UniTask'
+decl=384 open=385 close=389 span=5 FUNCTION 'ctor' name='UniTask'
+decl=395 open=396 close=398 span=3 FUNCTION 'get' name='' nested accessor
+decl=391 open=392 close=399 span=8 FUNCTION 'prop' name='Status'
+decl=403 open=404 close=406 span=3 FUNCTION 'fun' name='GetAwaiter'
+decl=411 open=412 close=421 span=10 FUNCTION 'fun' name='Preserve'
+decl=423 open=424 close=436 span=13 FUNCTION 'fun' name='AsUniTask'
+decl=438 open=439 close=441 span=3 FUNCTION 'op' name='UniTask'
+decl=445 open=446 close=457 span=12 FUNCTION 'op' name='System.Threading.Tasks.ValueTask<T>'
+decl=464 open=465 close=472 span=8 FUNCTION 'fun' name='SuppressCancellationThrow'
+decl=474 open=475 close=478 span=4 FUNCTION 'fun' name='ToString'
+decl=486 open=487 close=489 span=3 FUNCTION 'ctor' name='IsCanceledSource'
+decl=493 open=494 close=502 span=9 FUNCTION 'fun' name='GetResult'
+decl=506 open=507 close=509 span=3 FUNCTION 'fun' name='GetResult'
+decl=513 open=514 close=516 span=3 FUNCTION 'fun' name='GetStatus'
+decl=520 open=521 close=523 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=527 open=528 close=530 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=480 open=481 close=531 span=51 TYPE 'class' name='IsCanceledSource' nested ordinal=1
+decl=540 open=541 close=543 span=3 FUNCTION 'ctor' name='MemoizeSource'
+decl=545 open=546 close=581 span=36 FUNCTION 'fun' name='GetResult'
+decl=583 open=584 close=586 span=3 FUNCTION 'fun' name='GetResult'
+decl=588 open=589 close=596 span=8 FUNCTION 'fun' name='GetStatus'
+decl=598 open=599 close=608 span=10 FUNCTION 'fun' name='OnCompleted'
+decl=610 open=611 close=618 span=8 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=533 open=534 close=619 span=86 TYPE 'class' name='MemoizeSource' nested ordinal=2
+decl=627 open=628 close=630 span=3 FUNCTION 'ctor' name='Awaiter'
+decl=636 open=637 close=639 span=3 FUNCTION 'get' name='' nested accessor
+decl=632 open=633 close=640 span=8 FUNCTION 'prop' name='IsCompleted'
+decl=644 open=645 close=655 span=11 FUNCTION 'fun' name='GetResult'
+decl=659 open=660 close=670 span=11 FUNCTION 'fun' name='OnCompleted'
+decl=674 open=675 close=685 span=11 FUNCTION 'fun' name='UnsafeOnCompleted'
+decl=692 open=693 close=703 span=11 FUNCTION 'fun' name='SourceOnCompleted'
+decl=621 open=622 close=704 span=83 TYPE 'struct' name='Awaiter' nested ordinal=3
+decl=367 open=368 close=705 span=338 TYPE 'struct' name='UniTask' ordinal=3
+decl=11 open=12 close=706 span=695 NAMESPACE 'ns' name=''

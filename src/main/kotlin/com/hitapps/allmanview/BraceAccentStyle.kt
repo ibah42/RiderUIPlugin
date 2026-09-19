@@ -1,7 +1,9 @@
 package com.hitapps.allmanview
 
+import com.hitapps.allmanview.scan.BlockCounts
 import com.hitapps.allmanview.scan.BlockKind
 import com.hitapps.allmanview.scan.BraceAccent
+import com.hitapps.allmanview.scan.LabelPolicy
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorColors
@@ -43,6 +45,9 @@ class BraceStyle(
 class BraceAccentStyle(
     private val editor: Editor,
     private val settings: AllmanSettings,
+
+    /** How many types and namespaces the file holds; see [LabelPolicy.hasCompetition]. */
+    private val counts: BlockCounts,
 ) {
     private val cache = HashMap<String, BraceStyle>()
 
@@ -97,47 +102,23 @@ class BraceAccentStyle(
     }
 
     /**
-     * Whether the closing brace says what it closes. There are three separate reasons for it
-     * to, each with its own switch, and any one of them is enough:
-     *
-     *  - the block is **long**, so its own declaration has scrolled out of view
-     *    ([AccentConfig.labelMinLines], per kind);
-     *  - the block is **nested** inside one of its own kind, which is the hardest declaration
-     *    of all to find by scrolling ([AllmanSettings.Config.nestedLabelAlways]);
-     *  - the block is **numbered**, and the number is being repeated down here
-     *    ([numbersEndOfBlock]) -- `[3]` on its own says nothing, so whatever makes the ordinal
-     *    worth repeating makes the name worth repeating with it;
-     *  - the block is long enough to **report its own span** ([showsBlockSpan]), for the same
-     *    reason: a span with no name attached says how far you scrolled but not past what.
-     *
-     * The per-kind "label this kind at all" switch sits above all three: with it off the
-     * closing brace stays bare however the block qualifies.
+     * Whether the closing brace says what it closes; the three reasons and their order are
+     * [LabelPolicy.needsLabel]'s, and this only looks up the switches they read. The per-kind
+     * "label this kind at all" switch sits above all three: with it off the closing brace
+     * stays bare however the block qualifies.
      */
     fun needsLabel(accent: BraceAccent): Boolean {
-        if (accent.isOpening) {
-            return false
-        }
         val config = settings.accentFor(accent.kind)
-        if (config == null || !config.showLabel) {
-            return false
-        }
-        if (accent.keyword.isEmpty()) {
-            return false
-        }
-        // Deliberately not marksAsNested: the `nest` word and "name a nested block at all"
-        // are two switches, not one. A nested block's own declaration is the hardest to find by
-        // scrolling, which is why it may be named whatever its length -- with or without the
-        // word `nest` in front of it.
-        if (settings.state.nestedLabelAlways && isNestedBlock(accent)) {
-            return true
-        }
-        if (numbersEndOfBlock(accent)) {
-            return true
-        }
-        if (showsBlockSpan(accent)) {
-            return true
-        }
-        return accent.spannedLines >= config.labelMinLines
+        return LabelPolicy.needsLabel(
+            accent,
+            showLabel = config != null && config.showLabel,
+            labelMinLines = config?.labelMinLines ?: 0,
+            // Deliberately not marksAsNested: the `nest` word and "name a nested block at all"
+            // are two switches, not one.
+            nestedLabelAlways = settings.state.nestedLabelAlways,
+            numberingEnabled = settings.state.siblingNumberingEnabled,
+            numberingMinLines = settings.state.siblingNumberingEndOfBlockMinLines,
+        )
     }
 
     /**
@@ -156,17 +137,12 @@ class BraceAccentStyle(
 
     /**
      * A block nested inside another of its own kind, lambdas aside -- the shape of the thing,
-     * with no setting in it. [marksAsNested] adds the marker's own switch on top; [needsLabel]
-     * deliberately does not, so the two can be turned off independently.
+     * with no setting in it. [marksAsNested] adds the marker's own switch on top;
+     * [LabelPolicy.needsLabel] deliberately does not, so the two can be turned off
+     * independently.
      */
     private fun isNestedBlock(accent: BraceAccent): Boolean {
-        if (accent.isLambda || accent.isAccessor) {
-            // Both are inside something by definition -- a lambda inside whatever takes it, an
-            // accessor inside its property -- so saying "nested" about them adds nothing and
-            // would put the word on every `get` and `set` in the file.
-            return false
-        }
-        return accent.isNested
+        return LabelPolicy.isNestedBlock(accent)
     }
 
     /** Whether the braces themselves are decorated -- separate from whether the block is named. */
@@ -203,16 +179,11 @@ class BraceAccentStyle(
      * [numbersEndOfBlock].
      */
     fun siblingOrdinalText(accent: BraceAccent): String {
-        if (!settings.state.siblingNumberingEnabled) {
-            return ""
-        }
-        if (accent.siblingOrdinal <= 0) {
-            return ""
-        }
-        if (!accent.isOpening && !numbersEndOfBlock(accent)) {
-            return ""
-        }
-        return "[" + accent.siblingOrdinal + "]"
+        return LabelPolicy.siblingOrdinalText(
+            accent,
+            numberingEnabled = settings.state.siblingNumberingEnabled,
+            endOfBlockMinLines = settings.state.siblingNumberingEndOfBlockMinLines,
+        )
     }
 
     /**
@@ -226,45 +197,32 @@ class BraceAccentStyle(
      * on a closing brace with nothing after it.
      */
     private fun numbersEndOfBlock(accent: BraceAccent): Boolean {
-        if (!settings.state.siblingNumberingEnabled) {
-            return false
-        }
-        if (accent.siblingOrdinal <= 0) {
-            return false
-        }
-        return accent.spannedLines >= settings.state.siblingNumberingEndOfBlockMinLines
+        return LabelPolicy.numbersEndOfBlock(
+            accent,
+            numberingEnabled = settings.state.siblingNumberingEnabled,
+            minLines = settings.state.siblingNumberingEndOfBlockMinLines,
+        )
     }
 
     /**
-     * Whether a block is long enough to report its own span at the closing brace. End-only:
-     * see [AllmanSettings.Config.blockSpanMarkerEnabled] for why there is nothing to draw on
-     * the declaration line.
+     * Whether a block reports its own span at the closing brace -- see
+     * [LabelPolicy.showsBlockSpan] for the rule. Only the settings lookup lives here; with the
+     * decision itself in the scan package, "why did this class not print a span" is a unit
+     * test rather than a screenshot.
      */
     fun showsBlockSpan(accent: BraceAccent): Boolean {
-        if (!settings.state.blockSpanMarkerEnabled) {
-            return false
-        }
-        if (accent.isOpening) {
-            return false
-        }
-        return accent.spannedLines >= settings.state.blockSpanMarkerMinLines
+        val group = LabelPolicy.blockSpanGroupOf(accent)
+        return LabelPolicy.showsBlockSpan(accent, settings.blockSpanFor(group), counts)
     }
 
     /**
-     * `{: 920  Δ: 143` -- the line the block's `{` is on, then how many lines below it the `}`
-     * sits. The two are derived from one another rather than measured separately, so the pair
-     * always adds up to the line the reader is looking at: start + delta is this very line.
-     * That is what makes the marker checkable at a glance instead of being two numbers to
-     * trust.
-     *
-     * Lines are 1-based, matching the gutter. [BraceAccent.spannedLines] is already a delta --
-     * the scanner counts it from the opening brace's line -- so no second measurement is taken
-     * here and the marker cannot drift from the length every threshold in the plugin uses.
+     * `↑: 920  Δ: 143` -- see [LabelPolicy.blockSpanText]. Only the closing brace's line number
+     * needs the editor; the arithmetic and the wording are the policy's, so they are covered by
+     * a test rather than by looking at a file.
      */
     fun blockSpanText(accent: BraceAccent): String {
         val closingLine = editor.document.getLineNumber(clampToDocument(accent.offset)) + 1
-        val openingLine = closingLine - accent.spannedLines
-        return BLOCK_SPAN_START_PREFIX + openingLine + BLOCK_SPAN_DELTA_PREFIX + accent.spannedLines
+        return LabelPolicy.blockSpanText(closingLine, accent.spannedLines)
     }
 
     /**
@@ -436,14 +394,5 @@ class BraceAccentStyle(
 
         /** Greek lowercase lambda, standing in for `fun` on a lambda's own label. */
         private const val LAMBDA_SYMBOL = "λ"
-
-        /** Opens the span marker with the character the marker is about: `{: 920`. */
-        private const val BLOCK_SPAN_START_PREFIX = "{: "
-
-        /**
-         * Greek capital delta, the usual sign for a difference, between the two halves of the
-         * span marker. Two spaces before it, so the pair reads as two facts rather than one.
-         */
-        private const val BLOCK_SPAN_DELTA_PREFIX = "  Δ: "
     }
 }

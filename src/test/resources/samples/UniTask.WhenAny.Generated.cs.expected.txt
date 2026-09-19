@@ -1,0 +1,355 @@
+counts: types=15 namespaces=1
+blocks: 352
+
+decl=12 open=13 close=15 span=3 FUNCTION 'fun' name='WhenAny'
+decl=36 open=37 close=42 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=54 open=55 close=60 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=22 open=23 close=63 span=41 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=65 open=66 close=82 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=84 open=85 close=101 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=103 open=104 close=108 span=5 FUNCTION 'fun' name='GetResult'
+decl=110 open=111 close=113 span=3 FUNCTION 'fun' name='GetStatus'
+decl=115 open=116 close=118 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=120 open=121 close=123 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=125 open=126 close=128 span=3 FUNCTION 'fun' name='GetResult'
+decl=17 open=18 close=129 span=112 TYPE 'class' name='WhenAnyPromise' nested ordinal=1
+decl=131 open=132 close=134 span=3 FUNCTION 'fun' name='WhenAny'
+decl=155 open=156 close=161 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=173 open=174 close=179 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=191 open=192 close=197 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=141 open=142 close=200 span=59 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=202 open=203 close=219 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=221 open=222 close=238 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=240 open=241 close=257 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=260 open=261 close=265 span=5 FUNCTION 'fun' name='GetResult'
+decl=267 open=268 close=270 span=3 FUNCTION 'fun' name='GetStatus'
+decl=272 open=273 close=275 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=277 open=278 close=280 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=282 open=283 close=285 span=3 FUNCTION 'fun' name='GetResult'
+decl=136 open=137 close=286 span=150 TYPE 'class' name='WhenAnyPromise' nested ordinal=2
+decl=288 open=289 close=291 span=3 FUNCTION 'fun' name='WhenAny'
+decl=312 open=313 close=318 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=330 open=331 close=336 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=348 open=349 close=354 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=366 open=367 close=372 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=298 open=299 close=375 span=77 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=377 open=378 close=394 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=396 open=397 close=413 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=415 open=416 close=432 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=434 open=435 close=451 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=454 open=455 close=459 span=5 FUNCTION 'fun' name='GetResult'
+decl=461 open=462 close=464 span=3 FUNCTION 'fun' name='GetStatus'
+decl=466 open=467 close=469 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=471 open=472 close=474 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=476 open=477 close=479 span=3 FUNCTION 'fun' name='GetResult'
+decl=293 open=294 close=480 span=187 TYPE 'class' name='WhenAnyPromise' nested ordinal=3
+decl=482 open=483 close=485 span=3 FUNCTION 'fun' name='WhenAny'
+decl=506 open=507 close=512 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=524 open=525 close=530 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=542 open=543 close=548 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=560 open=561 close=566 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=578 open=579 close=584 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=492 open=493 close=587 span=95 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=589 open=590 close=606 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=608 open=609 close=625 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=627 open=628 close=644 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=646 open=647 close=663 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=665 open=666 close=682 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=685 open=686 close=690 span=5 FUNCTION 'fun' name='GetResult'
+decl=692 open=693 close=695 span=3 FUNCTION 'fun' name='GetStatus'
+decl=697 open=698 close=700 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=702 open=703 close=705 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=707 open=708 close=710 span=3 FUNCTION 'fun' name='GetResult'
+decl=487 open=488 close=711 span=224 TYPE 'class' name='WhenAnyPromise' nested ordinal=4
+decl=713 open=714 close=716 span=3 FUNCTION 'fun' name='WhenAny'
+decl=737 open=738 close=743 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=755 open=756 close=761 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=773 open=774 close=779 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=791 open=792 close=797 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=809 open=810 close=815 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=827 open=828 close=833 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=723 open=724 close=836 span=113 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=838 open=839 close=855 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=857 open=858 close=874 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=876 open=877 close=893 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=895 open=896 close=912 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=914 open=915 close=931 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=933 open=934 close=950 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=953 open=954 close=958 span=5 FUNCTION 'fun' name='GetResult'
+decl=960 open=961 close=963 span=3 FUNCTION 'fun' name='GetStatus'
+decl=965 open=966 close=968 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=970 open=971 close=973 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=975 open=976 close=978 span=3 FUNCTION 'fun' name='GetResult'
+decl=718 open=719 close=979 span=261 TYPE 'class' name='WhenAnyPromise' nested ordinal=5
+decl=981 open=982 close=984 span=3 FUNCTION 'fun' name='WhenAny'
+decl=1005 open=1006 close=1011 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1023 open=1024 close=1029 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1041 open=1042 close=1047 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1059 open=1060 close=1065 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1077 open=1078 close=1083 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1095 open=1096 close=1101 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1113 open=1114 close=1119 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=991 open=992 close=1122 span=131 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=1124 open=1125 close=1141 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=1143 open=1144 close=1160 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=1162 open=1163 close=1179 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=1181 open=1182 close=1198 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=1200 open=1201 close=1217 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=1219 open=1220 close=1236 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=1238 open=1239 close=1255 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=1258 open=1259 close=1263 span=5 FUNCTION 'fun' name='GetResult'
+decl=1265 open=1266 close=1268 span=3 FUNCTION 'fun' name='GetStatus'
+decl=1270 open=1271 close=1273 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=1275 open=1276 close=1278 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=1280 open=1281 close=1283 span=3 FUNCTION 'fun' name='GetResult'
+decl=986 open=987 close=1284 span=298 TYPE 'class' name='WhenAnyPromise' nested ordinal=6
+decl=1286 open=1287 close=1289 span=3 FUNCTION 'fun' name='WhenAny'
+decl=1310 open=1311 close=1316 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1328 open=1329 close=1334 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1346 open=1347 close=1352 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1364 open=1365 close=1370 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1382 open=1383 close=1388 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1400 open=1401 close=1406 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1418 open=1419 close=1424 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1436 open=1437 close=1442 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1296 open=1297 close=1445 span=149 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=1447 open=1448 close=1464 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=1466 open=1467 close=1483 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=1485 open=1486 close=1502 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=1504 open=1505 close=1521 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=1523 open=1524 close=1540 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=1542 open=1543 close=1559 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=1561 open=1562 close=1578 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=1580 open=1581 close=1597 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=1600 open=1601 close=1605 span=5 FUNCTION 'fun' name='GetResult'
+decl=1607 open=1608 close=1610 span=3 FUNCTION 'fun' name='GetStatus'
+decl=1612 open=1613 close=1615 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=1617 open=1618 close=1620 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=1622 open=1623 close=1625 span=3 FUNCTION 'fun' name='GetResult'
+decl=1291 open=1292 close=1626 span=335 TYPE 'class' name='WhenAnyPromise' nested ordinal=7
+decl=1628 open=1629 close=1631 span=3 FUNCTION 'fun' name='WhenAny'
+decl=1652 open=1653 close=1658 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1670 open=1671 close=1676 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1688 open=1689 close=1694 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1706 open=1707 close=1712 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1724 open=1725 close=1730 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1742 open=1743 close=1748 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1760 open=1761 close=1766 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1778 open=1779 close=1784 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1796 open=1797 close=1802 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=1638 open=1639 close=1805 span=167 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=1807 open=1808 close=1824 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=1826 open=1827 close=1843 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=1845 open=1846 close=1862 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=1864 open=1865 close=1881 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=1883 open=1884 close=1900 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=1902 open=1903 close=1919 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=1921 open=1922 close=1938 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=1940 open=1941 close=1957 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=1959 open=1960 close=1976 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=1979 open=1980 close=1984 span=5 FUNCTION 'fun' name='GetResult'
+decl=1986 open=1987 close=1989 span=3 FUNCTION 'fun' name='GetStatus'
+decl=1991 open=1992 close=1994 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=1996 open=1997 close=1999 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=2001 open=2002 close=2004 span=3 FUNCTION 'fun' name='GetResult'
+decl=1633 open=1634 close=2005 span=372 TYPE 'class' name='WhenAnyPromise' nested ordinal=8
+decl=2007 open=2008 close=2010 span=3 FUNCTION 'fun' name='WhenAny'
+decl=2031 open=2032 close=2037 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2049 open=2050 close=2055 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2067 open=2068 close=2073 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2085 open=2086 close=2091 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2103 open=2104 close=2109 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2121 open=2122 close=2127 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2139 open=2140 close=2145 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2157 open=2158 close=2163 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2175 open=2176 close=2181 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2193 open=2194 close=2199 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2017 open=2018 close=2202 span=185 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=2204 open=2205 close=2221 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=2223 open=2224 close=2240 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=2242 open=2243 close=2259 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=2261 open=2262 close=2278 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=2280 open=2281 close=2297 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=2299 open=2300 close=2316 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=2318 open=2319 close=2335 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=2337 open=2338 close=2354 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=2356 open=2357 close=2373 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=2375 open=2376 close=2392 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=2395 open=2396 close=2400 span=5 FUNCTION 'fun' name='GetResult'
+decl=2402 open=2403 close=2405 span=3 FUNCTION 'fun' name='GetStatus'
+decl=2407 open=2408 close=2410 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=2412 open=2413 close=2415 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=2417 open=2418 close=2420 span=3 FUNCTION 'fun' name='GetResult'
+decl=2012 open=2013 close=2421 span=409 TYPE 'class' name='WhenAnyPromise' nested ordinal=9
+decl=2423 open=2424 close=2426 span=3 FUNCTION 'fun' name='WhenAny'
+decl=2447 open=2448 close=2453 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2465 open=2466 close=2471 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2483 open=2484 close=2489 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2501 open=2502 close=2507 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2519 open=2520 close=2525 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2537 open=2538 close=2543 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2555 open=2556 close=2561 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2573 open=2574 close=2579 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2591 open=2592 close=2597 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2609 open=2610 close=2615 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2627 open=2628 close=2633 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2433 open=2434 close=2636 span=203 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=2638 open=2639 close=2655 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=2657 open=2658 close=2674 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=2676 open=2677 close=2693 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=2695 open=2696 close=2712 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=2714 open=2715 close=2731 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=2733 open=2734 close=2750 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=2752 open=2753 close=2769 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=2771 open=2772 close=2788 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=2790 open=2791 close=2807 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=2809 open=2810 close=2826 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=2828 open=2829 close=2845 span=17 FUNCTION 'fun' name='TryInvokeContinuationT11'
+decl=2848 open=2849 close=2853 span=5 FUNCTION 'fun' name='GetResult'
+decl=2855 open=2856 close=2858 span=3 FUNCTION 'fun' name='GetStatus'
+decl=2860 open=2861 close=2863 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=2865 open=2866 close=2868 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=2870 open=2871 close=2873 span=3 FUNCTION 'fun' name='GetResult'
+decl=2428 open=2429 close=2874 span=446 TYPE 'class' name='WhenAnyPromise' nested ordinal=10
+decl=2876 open=2877 close=2879 span=3 FUNCTION 'fun' name='WhenAny'
+decl=2900 open=2901 close=2906 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2918 open=2919 close=2924 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2936 open=2937 close=2942 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2954 open=2955 close=2960 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2972 open=2973 close=2978 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2990 open=2991 close=2996 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3008 open=3009 close=3014 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3026 open=3027 close=3032 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3044 open=3045 close=3050 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3062 open=3063 close=3068 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3080 open=3081 close=3086 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3098 open=3099 close=3104 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=2886 open=2887 close=3107 span=221 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=3109 open=3110 close=3126 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=3128 open=3129 close=3145 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=3147 open=3148 close=3164 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=3166 open=3167 close=3183 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=3185 open=3186 close=3202 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=3204 open=3205 close=3221 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=3223 open=3224 close=3240 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=3242 open=3243 close=3259 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=3261 open=3262 close=3278 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=3280 open=3281 close=3297 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=3299 open=3300 close=3316 span=17 FUNCTION 'fun' name='TryInvokeContinuationT11'
+decl=3318 open=3319 close=3335 span=17 FUNCTION 'fun' name='TryInvokeContinuationT12'
+decl=3338 open=3339 close=3343 span=5 FUNCTION 'fun' name='GetResult'
+decl=3345 open=3346 close=3348 span=3 FUNCTION 'fun' name='GetStatus'
+decl=3350 open=3351 close=3353 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=3355 open=3356 close=3358 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=3360 open=3361 close=3363 span=3 FUNCTION 'fun' name='GetResult'
+decl=2881 open=2882 close=3364 span=483 TYPE 'class' name='WhenAnyPromise' nested ordinal=11
+decl=3366 open=3367 close=3369 span=3 FUNCTION 'fun' name='WhenAny'
+decl=3390 open=3391 close=3396 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3408 open=3409 close=3414 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3426 open=3427 close=3432 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3444 open=3445 close=3450 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3462 open=3463 close=3468 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3480 open=3481 close=3486 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3498 open=3499 close=3504 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3516 open=3517 close=3522 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3534 open=3535 close=3540 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3552 open=3553 close=3558 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3570 open=3571 close=3576 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3588 open=3589 close=3594 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3606 open=3607 close=3612 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3376 open=3377 close=3615 span=239 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=3617 open=3618 close=3634 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=3636 open=3637 close=3653 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=3655 open=3656 close=3672 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=3674 open=3675 close=3691 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=3693 open=3694 close=3710 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=3712 open=3713 close=3729 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=3731 open=3732 close=3748 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=3750 open=3751 close=3767 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=3769 open=3770 close=3786 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=3788 open=3789 close=3805 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=3807 open=3808 close=3824 span=17 FUNCTION 'fun' name='TryInvokeContinuationT11'
+decl=3826 open=3827 close=3843 span=17 FUNCTION 'fun' name='TryInvokeContinuationT12'
+decl=3845 open=3846 close=3862 span=17 FUNCTION 'fun' name='TryInvokeContinuationT13'
+decl=3865 open=3866 close=3870 span=5 FUNCTION 'fun' name='GetResult'
+decl=3872 open=3873 close=3875 span=3 FUNCTION 'fun' name='GetStatus'
+decl=3877 open=3878 close=3880 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=3882 open=3883 close=3885 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=3887 open=3888 close=3890 span=3 FUNCTION 'fun' name='GetResult'
+decl=3371 open=3372 close=3891 span=520 TYPE 'class' name='WhenAnyPromise' nested ordinal=12
+decl=3893 open=3894 close=3896 span=3 FUNCTION 'fun' name='WhenAny'
+decl=3917 open=3918 close=3923 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3935 open=3936 close=3941 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3953 open=3954 close=3959 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3971 open=3972 close=3977 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3989 open=3990 close=3995 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4007 open=4008 close=4013 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4025 open=4026 close=4031 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4043 open=4044 close=4049 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4061 open=4062 close=4067 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4079 open=4080 close=4085 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4097 open=4098 close=4103 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4115 open=4116 close=4121 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4133 open=4134 close=4139 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4151 open=4152 close=4157 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=3903 open=3904 close=4160 span=257 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=4162 open=4163 close=4179 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=4181 open=4182 close=4198 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=4200 open=4201 close=4217 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=4219 open=4220 close=4236 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=4238 open=4239 close=4255 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=4257 open=4258 close=4274 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=4276 open=4277 close=4293 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=4295 open=4296 close=4312 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=4314 open=4315 close=4331 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=4333 open=4334 close=4350 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=4352 open=4353 close=4369 span=17 FUNCTION 'fun' name='TryInvokeContinuationT11'
+decl=4371 open=4372 close=4388 span=17 FUNCTION 'fun' name='TryInvokeContinuationT12'
+decl=4390 open=4391 close=4407 span=17 FUNCTION 'fun' name='TryInvokeContinuationT13'
+decl=4409 open=4410 close=4426 span=17 FUNCTION 'fun' name='TryInvokeContinuationT14'
+decl=4429 open=4430 close=4434 span=5 FUNCTION 'fun' name='GetResult'
+decl=4436 open=4437 close=4439 span=3 FUNCTION 'fun' name='GetStatus'
+decl=4441 open=4442 close=4444 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=4446 open=4447 close=4449 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=4451 open=4452 close=4454 span=3 FUNCTION 'fun' name='GetResult'
+decl=3898 open=3899 close=4455 span=557 TYPE 'class' name='WhenAnyPromise' nested ordinal=13
+decl=4457 open=4458 close=4460 span=3 FUNCTION 'fun' name='WhenAny'
+decl=4481 open=4482 close=4487 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4499 open=4500 close=4505 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4517 open=4518 close=4523 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4535 open=4536 close=4541 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4553 open=4554 close=4559 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4571 open=4572 close=4577 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4589 open=4590 close=4595 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4607 open=4608 close=4613 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4625 open=4626 close=4631 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4643 open=4644 close=4649 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4661 open=4662 close=4667 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4679 open=4680 close=4685 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4697 open=4698 close=4703 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4715 open=4716 close=4721 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4733 open=4734 close=4739 span=6 FUNCTION 'fun' name='SourceOnCompleted' nested lambda
+decl=4467 open=4468 close=4742 span=275 FUNCTION 'ctor' name='WhenAnyPromise'
+decl=4744 open=4745 close=4761 span=17 FUNCTION 'fun' name='TryInvokeContinuationT1'
+decl=4763 open=4764 close=4780 span=17 FUNCTION 'fun' name='TryInvokeContinuationT2'
+decl=4782 open=4783 close=4799 span=17 FUNCTION 'fun' name='TryInvokeContinuationT3'
+decl=4801 open=4802 close=4818 span=17 FUNCTION 'fun' name='TryInvokeContinuationT4'
+decl=4820 open=4821 close=4837 span=17 FUNCTION 'fun' name='TryInvokeContinuationT5'
+decl=4839 open=4840 close=4856 span=17 FUNCTION 'fun' name='TryInvokeContinuationT6'
+decl=4858 open=4859 close=4875 span=17 FUNCTION 'fun' name='TryInvokeContinuationT7'
+decl=4877 open=4878 close=4894 span=17 FUNCTION 'fun' name='TryInvokeContinuationT8'
+decl=4896 open=4897 close=4913 span=17 FUNCTION 'fun' name='TryInvokeContinuationT9'
+decl=4915 open=4916 close=4932 span=17 FUNCTION 'fun' name='TryInvokeContinuationT10'
+decl=4934 open=4935 close=4951 span=17 FUNCTION 'fun' name='TryInvokeContinuationT11'
+decl=4953 open=4954 close=4970 span=17 FUNCTION 'fun' name='TryInvokeContinuationT12'
+decl=4972 open=4973 close=4989 span=17 FUNCTION 'fun' name='TryInvokeContinuationT13'
+decl=4991 open=4992 close=5008 span=17 FUNCTION 'fun' name='TryInvokeContinuationT14'
+decl=5010 open=5011 close=5027 span=17 FUNCTION 'fun' name='TryInvokeContinuationT15'
+decl=5030 open=5031 close=5035 span=5 FUNCTION 'fun' name='GetResult'
+decl=5037 open=5038 close=5040 span=3 FUNCTION 'fun' name='GetStatus'
+decl=5042 open=5043 close=5045 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=5047 open=5048 close=5050 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=5052 open=5053 close=5055 span=3 FUNCTION 'fun' name='GetResult'
+decl=4462 open=4463 close=5056 span=594 TYPE 'class' name='WhenAnyPromise' nested ordinal=14
+decl=10 open=11 close=5057 span=5047 TYPE 'struct' name='UniTask'
+decl=8 open=9 close=5058 span=5050 NAMESPACE 'ns' name=''

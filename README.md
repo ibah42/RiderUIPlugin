@@ -73,16 +73,50 @@ Lambdas count as functions. They have no name of their own, so the colour and th
 the nearest meaningful identifier: first the unclosed call (`items.Select(y => {` → `Select`), and
 only when there is no call, the assignment target (`Action handler = () => {` → `handler`).
 
+"Function" covers more than a method, and each sub-kind says what it is in its own word, with its
+own checkbox under **Which function blocks**:
+
+| Label | What it is |
+| --- | --- |
+| `fun Update` | an ordinary method or a local function |
+| `op +`, `op ==`, `op int` | an operator overload or a conversion — the word, then the operator exactly as the source writes it. Shares the methods checkbox: an operator is a method, and `fun +` would have read as a method called `+` |
+| `ctor`, `static ctor`, `dtor` | a constructor, a static constructor, a destructor |
+| `prop Name` | a property's own braces, and `this` for an indexer |
+| `get`, `set`, `init` | an accessor body inside a property |
+| `λ Select` | a lambda or an anonymous delegate |
+| `ns` | a `namespace` |
+
 Ownership is worked out without a parser: the scanner keeps a stack of open `{`, and a closing
 brace recognizes its block by popping the stack. The kind of block is read from the header —
 either a type keyword, or "ends with `)` and the first word is not a control keyword". The header
 is looked for on the current line, and when the `{` sits on its own line (code that is already
-Allman), on the previous one.
+Allman), on the previous one. A declaration wrapped over several lines is read whole, including a
+`where` clause or a base-type list broken onto lines of its own.
 
-What deliberately passes by: `namespace`, auto-properties `{ get; set; }` and properties with a
-body, initializers `new Foo() { ... }`, lambdas `() => { }`, and every control construct.
-Constraints are cut off before classification, otherwise
-`void Bind<T>(T v) where T : class {` would pass for a type.
+What deliberately passes by: initializers `new Foo() { ... }`, and every control construct — `if`,
+`for`, `switch`, `using`, `lock`, `try` and the rest. Constraints are cut off before
+classification, otherwise `void Bind<T>(T v) where T : class {` would pass for a type.
+
+### What a closing brace can say
+
+Up to four things, left to right, each with its own switch and its own length threshold:
+
+- `[3]` — which of its container's type/namespace siblings this is. Always drawn in front of the
+  declaration; repeated after the `}` only once the block is long enough that the opening line has
+  scrolled away.
+- `nest` — the block sits inside another of its own kind. A nested declaration is the hardest to
+  find by scrolling, so a nested block may be named whatever its length.
+- `class Foo` — the construct word and the name. The word takes the editor's own keyword colour
+  and the name its own accent colour, so a label never paints `class` in the colour of a class
+  name.
+- `↑: 920  Δ: 143` — the block is declared on line 920 and its `}` is 143 lines below it. The
+  two numbers are derived from one another, so they always add up to the line you are looking at
+  and can be checked at a glance. The **declaration's** line, not the `{`'s: a wrapped signature
+  puts several lines between the two, and every length in the plugin is measured from the
+  declaration. This one is end-only — standing on line 920 you can already see the block starts
+  there — and it reads on its own, so it is drawn even on a block that is not named. Its lengths
+  are set per kind (types, functions, properties, namespaces), and for types and namespaces it can
+  be restricted to files that hold more than one of them.
 
 ## Two independent switches
 

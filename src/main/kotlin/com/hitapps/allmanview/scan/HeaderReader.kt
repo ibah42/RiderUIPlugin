@@ -70,6 +70,91 @@ internal object HeaderReader {
         return before == null || !isIdentifierChar(before)
     }
 
+    /**
+     * Where the parameter list opens: the first top-level `(...)` group that the declaration
+     * ends with -- nothing after it, or a constructor initializer (`: base(...)`) or a `where`
+     * clause.
+     *
+     * Not simply the first `(`, which is what this used to be: a tuple return type puts a pair
+     * of parentheses in front of the name -- `public (int, T1 result1) GetResult(short token)` --
+     * and taking that one makes the modifier before it, `public`, look like the method's name.
+     * Generated code is full of that shape.
+     *
+     * Not the last `(` either: `public Service(ILogger logger) : base(logger)` would then be
+     * named after its base call. What tells the two apart is not position but what follows the
+     * group -- a tuple return type is followed by the name it qualifies, a parameter list by
+     * the end of the declaration.
+     *
+     * String and character literals are stepped over, since a default parameter value may
+     * legitimately contain a bracket: `void Write(string suffix = ")")`.
+     *
+     * When no group qualifies the first top-level `(` is returned, which is what this used to
+     * do unconditionally. A header can be legitimately unbalanced -- `Run(delegate(int x) {`
+     * is sliced from inside a call that has not closed yet -- and there the old answer is
+     * still the right one.
+     *
+     * @return the index, or -1 when the header has no parentheses at all
+     */
+    fun parameterListStart(header: String): Int {
+        var groupStart = -1
+        var firstGroupStart = -1
+        var depth = 0
+        var index = 0
+        var inString = false
+        var inChar = false
+
+        while (index < header.length) {
+            val character = header[index]
+            if (inString) {
+                if (character == '\\') {
+                    index++
+                } else if (character == '"') {
+                    inString = false
+                }
+            } else if (inChar) {
+                if (character == '\\') {
+                    index++
+                } else if (character == '\'') {
+                    inChar = false
+                }
+            } else if (character == '"') {
+                inString = true
+            } else if (character == '\'') {
+                inChar = true
+            } else if (character == '(') {
+                if (depth == 0) {
+                    groupStart = index
+                    if (firstGroupStart < 0) {
+                        firstGroupStart = index
+                    }
+                }
+                depth++
+            } else if (character == ')' && depth > 0) {
+                depth--
+                if (depth == 0 && endsTheDeclaration(header, index + 1)) {
+                    return groupStart
+                }
+            }
+            index++
+        }
+        return firstGroupStart
+    }
+
+    /** Whether the declaration is over at [index], bar a constructor initializer or a `where`. */
+    private fun endsTheDeclaration(header: String, index: Int): Boolean {
+        var cursor = index
+        while (cursor < header.length && header[cursor].isWhitespace()) {
+            cursor++
+        }
+        if (cursor >= header.length) {
+            return true
+        }
+        if (header[cursor] == ':') {
+            return true
+        }
+        return identifierAt(header, cursor) in WHERE_KEYWORDS
+    }
+
     /** In `Foo<T>(` the name precedes the generic parameters, so `<...>` is rewound. */
     fun skipGenericsBefore(header: String, parenIndex: Int): Int {
         var cursor = parenIndex - 1

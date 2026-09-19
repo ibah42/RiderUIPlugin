@@ -111,7 +111,11 @@ data class ScanOptions(
      */
     val accentFunctions: Boolean = true,
 
-    /** Ordinary methods and local functions -- the `fun` label. */
+    /**
+     * Ordinary methods and local functions -- the `fun` label -- and operator overloads and
+     * conversions, which carry the `op` label but are methods in every other respect and so
+     * share this switch rather than having one of their own.
+     */
     val accentMethods: Boolean = true,
 
     /** Constructors, static constructors and destructors -- `ctor`, `static ctor`, `dtor`. */
@@ -176,4 +180,40 @@ data class PhantomSite(
 data class ScanResult(
     val sites: List<PhantomSite>,
     val accents: List<BraceAccent>,
+
+    /** See [BlockCounts]. */
+    val counts: BlockCounts = BlockCounts(0, 0),
 )
+
+/**
+ * How many blocks of each kind the whole file holds, for the settings that ask whether a block
+ * has anything to be told apart from.
+ *
+ * Counted from the blocks actually reported, which is enough: a count is only ever read while
+ * deciding what to draw on a block of that same kind, and such a block exists only when that
+ * kind is switched on. With types switched off the type count is zero, and there is no type
+ * left to ask about.
+ */
+data class BlockCounts(
+    val types: Int,
+    val namespaces: Int,
+)
+
+/**
+ * The keyword the scanner reports for a property's own block, as opposed to its accessors.
+ *
+ * Public because settings outside this package group properties separately from ordinary
+ * functions and have to recognise one; a second copy of the string in another file is exactly
+ * the kind of thing that drifts.
+ */
+const val PROPERTY_KEYWORD = "prop"
+
+/**
+ * The keyword the scanner reports for an operator overload or a conversion. The label pairs it
+ * with the operator itself, exactly as the source writes it: `op +`, `op ==`, `op int`.
+ *
+ * An operator is a method as far as every switch is concerned -- [ScanOptions.accentMethods]
+ * turns it on and off, and it answers to the function group's lengths. Only the label is its
+ * own, because `fun +` would read as a method called `+`.
+ */
+const val OPERATOR_KEYWORD = "op"

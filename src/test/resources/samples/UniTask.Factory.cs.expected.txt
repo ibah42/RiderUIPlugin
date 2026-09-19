@@ -1,0 +1,78 @@
+counts: types=10 namespaces=1
+blocks: 75
+
+decl=13 open=14 close=16 span=3 FUNCTION 'fun' name='Func' lambda
+decl=22 open=23 close=25 span=3 FUNCTION 'static ctor' name='CanceledUniTaskCache'
+decl=18 open=19 close=26 span=8 TYPE 'class' name='CanceledUniTaskCache' nested ordinal=1
+decl=30 open=31 close=38 span=8 FUNCTION 'fun' name='FromException'
+decl=40 open=41 close=48 span=8 FUNCTION 'fun' name='FromException'
+decl=50 open=51 close=53 span=3 FUNCTION 'fun' name='FromResult'
+decl=55 open=56 close=65 span=10 FUNCTION 'fun' name='FromCanceled'
+decl=67 open=68 close=77 span=10 FUNCTION 'fun' name='FromCanceled'
+decl=79 open=80 close=82 span=3 FUNCTION 'fun' name='Create'
+decl=84 open=85 close=87 span=3 FUNCTION 'fun' name='Create'
+decl=89 open=90 close=92 span=3 FUNCTION 'fun' name='Lazy'
+decl=94 open=95 close=97 span=3 FUNCTION 'fun' name='Lazy'
+decl=102 open=103 close=105 span=3 FUNCTION 'fun' name='Void'
+decl=110 open=111 close=113 span=3 FUNCTION 'fun' name='Void'
+decl=118 open=119 close=121 span=3 FUNCTION 'fun' name='Void'
+decl=127 open=128 close=130 span=3 FUNCTION 'fun' name='Action'
+decl=135 open=136 close=138 span=3 FUNCTION 'fun' name='Action'
+decl=146 open=147 close=149 span=3 FUNCTION 'fun' name='UnityAction'
+decl=155 open=156 close=158 span=3 FUNCTION 'fun' name='UnityAction'
+decl=165 open=166 close=168 span=3 FUNCTION 'fun' name='Defer'
+decl=173 open=174 close=176 span=3 FUNCTION 'fun' name='Defer'
+decl=181 open=182 close=184 span=3 FUNCTION 'fun' name='Never'
+decl=189 open=190 close=192 span=3 FUNCTION 'fun' name='Never'
+decl=199 open=200 close=202 span=3 FUNCTION 'ctor' name='ExceptionResultSource'
+decl=204 open=205 close=212 span=8 FUNCTION 'fun' name='GetResult'
+decl=214 open=215 close=217 span=3 FUNCTION 'fun' name='GetStatus'
+decl=219 open=220 close=222 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=224 open=225 close=227 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=229 open=230 close=235 span=6 FUNCTION 'dtor' name='ExceptionResultSource'
+decl=194 open=195 close=236 span=42 TYPE 'class' name='ExceptionResultSource' nested ordinal=2
+decl=243 open=244 close=246 span=3 FUNCTION 'ctor' name='ExceptionResultSource'
+decl=248 open=249 close=257 span=9 FUNCTION 'fun' name='GetResult'
+decl=259 open=260 close=267 span=8 FUNCTION 'fun' name='GetResult'
+decl=269 open=270 close=272 span=3 FUNCTION 'fun' name='GetStatus'
+decl=274 open=275 close=277 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=279 open=280 close=282 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=284 open=285 close=290 span=6 FUNCTION 'dtor' name='ExceptionResultSource'
+decl=238 open=239 close=291 span=53 TYPE 'class' name='ExceptionResultSource' nested ordinal=3
+decl=297 open=298 close=300 span=3 FUNCTION 'ctor' name='CanceledResultSource'
+decl=302 open=303 close=305 span=3 FUNCTION 'fun' name='GetResult'
+decl=307 open=308 close=310 span=3 FUNCTION 'fun' name='GetStatus'
+decl=312 open=313 close=315 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=317 open=318 close=320 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=293 open=294 close=321 span=28 TYPE 'class' name='CanceledResultSource' nested ordinal=4
+decl=327 open=328 close=330 span=3 FUNCTION 'ctor' name='CanceledResultSource'
+decl=332 open=333 close=335 span=3 FUNCTION 'fun' name='GetResult'
+decl=337 open=338 close=340 span=3 FUNCTION 'fun' name='GetResult'
+decl=342 open=343 close=345 span=3 FUNCTION 'fun' name='GetStatus'
+decl=347 open=348 close=350 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=352 open=353 close=355 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=323 open=324 close=356 span=33 TYPE 'class' name='CanceledResultSource' nested ordinal=5
+decl=364 open=365 close=367 span=3 FUNCTION 'ctor' name='DeferPromise'
+decl=369 open=370 close=372 span=3 FUNCTION 'fun' name='GetResult'
+decl=374 open=375 close=384 span=10 FUNCTION 'fun' name='GetStatus'
+decl=386 open=387 close=389 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=391 open=392 close=394 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=358 open=359 close=395 span=37 TYPE 'class' name='DeferPromise' nested ordinal=6
+decl=403 open=404 close=406 span=3 FUNCTION 'ctor' name='DeferPromise'
+decl=408 open=409 close=411 span=3 FUNCTION 'fun' name='GetResult'
+decl=413 open=414 close=416 span=3 FUNCTION 'fun' name='GetResult'
+decl=418 open=419 close=428 span=10 FUNCTION 'fun' name='GetStatus'
+decl=430 open=431 close=433 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=435 open=436 close=438 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=397 open=398 close=439 span=42 TYPE 'class' name='DeferPromise' nested ordinal=7
+decl=448 open=449 close=455 span=7 FUNCTION 'ctor' name='NeverPromise'
+decl=457 open=458 close=461 span=4 FUNCTION 'fun' name='CancellationCallback'
+decl=463 open=464 close=466 span=3 FUNCTION 'fun' name='GetResult'
+decl=468 open=469 close=471 span=3 FUNCTION 'fun' name='GetStatus'
+decl=473 open=474 close=476 span=3 FUNCTION 'fun' name='UnsafeGetStatus'
+decl=478 open=479 close=481 span=3 FUNCTION 'fun' name='OnCompleted'
+decl=483 open=484 close=486 span=3 FUNCTION 'fun' name='GetResult'
+decl=441 open=442 close=487 span=46 TYPE 'class' name='NeverPromise' nested ordinal=8
+decl=11 open=12 close=488 span=477 TYPE 'struct' name='UniTask' ordinal=1
+decl=490 open=491 close=498 span=8 TYPE 'class' name='CompletedTasks' ordinal=2
+decl=9 open=10 close=499 span=490 NAMESPACE 'ns' name=''

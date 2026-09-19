@@ -121,7 +121,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         }
 
         val result = scanResult(settings, flavor)
-        val accentStyle = BraceAccentStyle(editor, settings)
+        val accentStyle = BraceAccentStyle(editor, settings, result.counts)
         paintMovedBraces(settings, result, phantomBraceStyles(accentStyle, result))
     }
 
@@ -142,7 +142,7 @@ class AllmanController(private val editor: Editor) : Disposable {
         }
 
         val result = scanResult(settings, flavor)
-        val accentStyle = BraceAccentStyle(editor, settings)
+        val accentStyle = BraceAccentStyle(editor, settings, result.counts)
 
         paintDeclarationLineMarkers(accentStyle, result)
         paintRealBraces(
@@ -487,7 +487,7 @@ class AllmanController(private val editor: Editor) : Disposable {
      * behind its own switch, then the construct word (`class`, `fun`, `ns`, ...) in the
      * editor's own keyword colour and the symbol's own name in its own accent colour -- those
      * last two only when this kind of block is named at all, which is a separate switch again
-     * -- and last of all, on a very long block, the span marker `{: 920  Δ: 143`.
+     * -- and last of all, on a very long block, the span marker `↑: 920  Δ: 143`.
      *
      * An empty list means the closing brace gets no inlay: with every part switched off there
      * would be nothing to draw in it.
@@ -500,17 +500,19 @@ class AllmanController(private val editor: Editor) : Disposable {
         val segments = ArrayList<BlockLabelRenderer.Segment>(LABEL_SEGMENT_CAPACITY)
         appendMarkerSegments(segments, style, accent, accent.offset)
 
-        if (!style.needsLabel(accent)) {
-            return segments
+        if (style.needsLabel(accent)) {
+            if (braceStyle.keywordText.isNotEmpty()) {
+                appendSegment(segments, braceStyle.keywordText, braceStyle.keywordColor)
+            }
+            if (braceStyle.nameText.isNotEmpty()) {
+                appendSegment(segments, braceStyle.nameText, braceStyle.nameColor)
+            }
         }
-        if (braceStyle.keywordText.isNotEmpty()) {
-            appendSegment(segments, braceStyle.keywordText, braceStyle.keywordColor)
-        }
-        if (braceStyle.nameText.isNotEmpty()) {
-            appendSegment(segments, braceStyle.nameText, braceStyle.nameColor)
-        }
-        // Last, after the name: the span is about the block as a whole, so it reads as a
-        // footnote to everything in front of it rather than as another word in its title.
+
+        // Last, after the name, and outside the label question entirely: the span is about the
+        // block as a whole, so it reads as a footnote to whatever stands in front of it -- and
+        // it is the one marker that says something complete on its own, so a block that is not
+        // named still gets it.
         if (style.showsBlockSpan(accent)) {
             appendSegment(segments, style.blockSpanText(accent), style.blockSpanColor())
         }
