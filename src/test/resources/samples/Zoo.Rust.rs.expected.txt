@@ -1,0 +1,13 @@
+counts: types=5 namespaces=1
+blocks: 10
+
+decl=7 open=7 close=10 span=3 TYPE 'struct' name='Client' ordinal=1
+decl=12 open=12 close=14 span=2 TYPE 'trait' name='Fetch' ordinal=2
+decl=17 open=17 close=19 span=2 FUNCTION 'fun' name='new'
+decl=21 open=21 close=27 span=6 FUNCTION 'fun' name='longest'
+decl=16 open=16 close=28 span=12 TYPE 'impl' name='Client' ordinal=3
+decl=31 open=31 close=35 span=4 FUNCTION 'fun' name='get'
+decl=30 open=30 close=36 span=6 TYPE 'impl' name='Client' ordinal=4
+decl=38 open=38 close=41 span=3 TYPE 'enum' name='Outcome' ordinal=5
+decl=6 open=6 close=42 span=36 NAMESPACE 'mod' name=''
+decl=44 open=44 close=47 span=3 FUNCTION 'fun' name='danger'

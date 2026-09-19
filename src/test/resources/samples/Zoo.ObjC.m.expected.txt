@@ -1,0 +1,11 @@
+counts: types=0 namespaces=0
+blocks: 8
+
+decl=10 open=11 close=18 span=8 FUNCTION 'fun' name='initWithName'
+decl=20 open=21 close=24 span=4 FUNCTION 'fun' name='shared'
+decl=28 open=28 close=30 span=2 FUNCTION 'fun' name='animations' nested lambda
+decl=30 open=30 close=32 span=2 FUNCTION 'fun' name='completion' nested lambda
+decl=26 open=27 close=33 span=7 FUNCTION 'fun' name='fetchWithCompletion'
+decl=35 open=36 close=42 span=7 FUNCTION 'fun' name='nameForIndex'
+decl=44 open=45 close=50 span=6 FUNCTION 'fun' name='each'
+decl=54 open=55 close=60 span=6 FUNCTION 'fun' name='HTALogEverything'

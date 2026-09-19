@@ -1,0 +1,28 @@
+counts: types=7 namespaces=0
+blocks: 25
+
+decl=6 open=6 close=8 span=2 TYPE 'protocol' name='Fetching' ordinal=1
+decl=15 open=15 close=22 span=7 FUNCTION 'prop' name='isTerminal'
+decl=10 open=10 close=23 span=13 TYPE 'enum' name='LoadState' ordinal=2
+decl=29 open=29 close=31 span=2 FUNCTION 'prop' name=''
+decl=25 open=25 close=32 span=7 TYPE 'struct' name='Page' ordinal=3
+decl=35 open=35 close=38 span=3 FUNCTION 'fun' name='fetch'
+decl=34 open=34 close=39 span=5 TYPE 'extension' name='URLSession' ordinal=4
+decl=44 open=44 close=46 span=2 FUNCTION 'fun' name='bump'
+decl=41 open=41 close=47 span=6 TYPE 'actor' name='RequestCounter' ordinal=5
+decl=56 open=56 close=58 span=2 FUNCTION 'didSet' name='' nested accessor
+decl=55 open=55 close=59 span=4 FUNCTION 'prop' name='name'
+decl=62 open=62 close=64 span=2 FUNCTION 'get' name='' nested accessor
+decl=65 open=65 close=67 span=2 FUNCTION 'set' name='' nested accessor
+decl=61 open=61 close=68 span=7 FUNCTION 'prop' name='summary'
+decl=70 open=70 close=73 span=3 FUNCTION 'ctor' name=''
+decl=75 open=75 close=77 span=2 FUNCTION 'ctor' name=''
+decl=79 open=79 close=81 span=2 FUNCTION 'dtor' name=''
+decl=83 open=83 close=85 span=2 FUNCTION 'fun' name='reset'
+decl=96 open=96 close=98 span=2 FUNCTION 'fun' name='async' nested lambda
+decl=100 open=100 close=102 span=2 FUNCTION 'fun' name='forEach' nested lambda
+decl=88 open=88 close=103 span=15 FUNCTION 'fun' name='load'
+decl=105 open=105 close=109 span=4 FUNCTION 'fun' name='notify'
+decl=114 open=114 close=116 span=2 FUNCTION 'fun' name='validated'
+decl=111 open=111 close=117 span=6 TYPE 'struct' name='Options' nested
+decl=49 open=49 close=118 span=69 TYPE 'class' name='Client' ordinal=6

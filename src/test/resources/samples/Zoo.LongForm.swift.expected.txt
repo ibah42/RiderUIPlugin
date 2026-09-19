@@ -1,0 +1,29 @@
+counts: types=8 namespaces=0
+blocks: 26
+
+decl=9 open=9 close=11 span=2 TYPE 'protocol' name='Fetching' ordinal=1
+decl=14 open=14 close=22 span=8 FUNCTION 'fun' name='short'
+decl=24 open=24 close=53 span=29 FUNCTION 'fun' name='justUnder'
+decl=13 open=13 close=61 span=48 TYPE 'struct' name='UnderLabel' ordinal=2
+decl=64 open=64 close=95 span=31 FUNCTION 'fun' name='justOver'
+decl=97 open=97 close=105 span=8 FUNCTION 'fun' name='tiny'
+decl=63 open=63 close=113 span=50 TYPE 'struct' name='OverLabel' ordinal=3
+decl=116 open=116 close=124 span=8 FUNCTION 'ctor' name=''
+decl=126 open=126 close=134 span=8 FUNCTION 'dtor' name=''
+decl=136 open=136 close=195 span=59 FUNCTION 'fun' name='justUnderSpan'
+decl=115 open=115 close=213 span=98 TYPE 'class' name='UnderSpan' ordinal=4
+decl=216 open=216 close=277 span=61 FUNCTION 'fun' name='overSpan'
+decl=280 open=280 close=310 span=30 FUNCTION 'get' name='' nested accessor
+decl=279 open=279 close=317 span=38 FUNCTION 'prop' name='underPropertySpan'
+decl=320 open=320 close=352 span=32 FUNCTION 'get' name='' nested accessor
+decl=319 open=319 close=359 span=40 FUNCTION 'prop' name='overPropertySpan'
+decl=361 open=361 close=369 span=8 FUNCTION 'prop' name=''
+decl=215 open=215 close=371 span=156 TYPE 'class' name='OverSpan' ordinal=5
+decl=374 open=374 close=390 span=16 FUNCTION 'fun' name='bump'
+decl=373 open=373 close=392 span=19 TYPE 'actor' name='Counter' ordinal=6
+decl=395 open=395 close=409 span=14 FUNCTION 'fun' name='fetch'
+decl=394 open=394 close=411 span=17 TYPE 'extension' name='String' ordinal=7
+decl=413 open=413 close=416 span=3 TYPE 'enum' name='Outcome' ordinal=8
+decl=422 open=422 close=441 span=19 FUNCTION 'fun' name='forEach' nested lambda
+decl=443 open=443 close=445 span=2 FUNCTION 'fun' name='async' nested lambda
+decl=418 open=418 close=457 span=39 FUNCTION 'fun' name='withClosures'
